@@ -23,3 +23,5 @@ rootProject.name = "ShieldMedia"
 include(":app")
 include(":core:designsystem")
 include(":core:player")
+include(":plex:data")
+include(":plex:ui")

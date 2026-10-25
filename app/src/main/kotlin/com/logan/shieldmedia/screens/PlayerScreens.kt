@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.first
 fun PlayerRoute(
     uri: String,
     title: String,
+    startMs: Long,
     settingsRepository: SettingsRepository,
     onExit: () -> Unit,
 ) {
@@ -53,7 +54,7 @@ fun PlayerRoute(
     if (loaded == null) {
         Box(Modifier.fillMaxSize().background(Color.Black))
     } else {
-        PlayerScreen(uri = uri, title = title, config = loaded, onExit = onExit)
+        PlayerScreen(uri = uri, title = title, startPositionMs = startMs, config = loaded, onExit = onExit)
     }
 }
 
@@ -142,7 +143,7 @@ fun PlayerTestScreen(onPlay: PlayHandler) {
                     selected = false,
                     onClick = {
                         focusedIndex = index
-                        onPlay(stream.uri, stream.name)
+                        onPlay(stream.uri, stream.name, 0L)
                     },
                     headlineContent = { Text(stream.name) },
                     supportingContent = { Text(stream.detail) },

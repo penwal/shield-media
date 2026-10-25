@@ -2,14 +2,15 @@ package com.logan.shieldmedia.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -18,28 +19,14 @@ import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
-import com.logan.shieldmedia.designsystem.ContentRow
-import com.logan.shieldmedia.designsystem.MediaCard
 import com.logan.shieldmedia.designsystem.ScreenTitle
+import com.logan.shieldmedia.designsystem.ShieldColors
+import com.logan.shieldmedia.designsystem.Spacing
+import com.logan.shieldmedia.plex.PlexSession
+import com.logan.shieldmedia.plex.PlexState
 import com.logan.shieldmedia.settings.PlayerSettings
 import com.logan.shieldmedia.settings.SettingsRepository
 import kotlinx.coroutines.launch
-
-private val sampleTitles = listOf(
-    "Movie One", "Movie Two", "Movie Three", "Movie Four", "Movie Five",
-    "Movie Six", "Movie Seven", "Movie Eight",
-)
-
-@Composable
-fun HomeScreen() {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        ScreenTitle("Home", "Placeholder content until Plex is connected (milestone 3)")
-        ContentRow("Continue Watching", sampleTitles) { MediaCard(title = it) }
-        ContentRow("Recently Added", sampleTitles.reversed(), Modifier.padding(top = 16.dp)) {
-            MediaCard(title = it)
-        }
-    }
-}
 
 @Composable
 fun PlaceholderScreen(title: String, subtitle: String) {
@@ -50,34 +37,100 @@ fun PlaceholderScreen(title: String, subtitle: String) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun SettingsScreen(repository: SettingsRepository, onOpenPlayerTest: () -> Unit) {
+fun SettingsScreen(
+    repository: SettingsRepository,
+    plexSession: PlexSession,
+    onPlexSignIn: () -> Unit,
+    onOpenPlayerTest: () -> Unit,
+) {
     val settings by repository.playerSettings.collectAsState(initial = PlayerSettings())
+    val plexState by plexSession.state.collectAsState()
+    val plexUser by produceState<String?>(null, plexState) {
+        value = if (plexState is PlexState.Ready) plexSession.user()?.let { it.title ?: it.username } else null
+    }
     val scope = rememberCoroutineScope()
 
     Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Settings", "Player")
-        Column(
-            Modifier.padding(horizontal = 48.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ScreenTitle("Settings")
+        LazyColumn(
+            Modifier.width(640.dp),
+            contentPadding = PaddingValues(start = Spacing.ScreenH, bottom = 48.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            SettingRow("Match display frame rate", settings.autoFrameRate) {
-                scope.launch { repository.setAutoFrameRate(it) }
+            item { SectionLabel("Plex") }
+            when (val s = plexState) {
+                is PlexState.Ready -> {
+                    item {
+                        ListItem(
+                            selected = false,
+                            onClick = { scope.launch { plexSession.discoverServers() } },
+                            headlineContent = { Text("Server: ${s.server.name}") },
+                            supportingContent = { Text(listOfNotNull(plexUser, "Select to switch servers").joinToString("  ·  ")) },
+                        )
+                    }
+                    item {
+                        ListItem(
+                            selected = false,
+                            onClick = { scope.launch { plexSession.signOut() } },
+                            headlineContent = { Text("Sign out of Plex") },
+                        )
+                    }
+                }
+                PlexState.SignedOut -> item {
+                    ListItem(
+                        selected = false,
+                        onClick = onPlexSignIn,
+                        headlineContent = { Text("Sign in with Plex") },
+                        supportingContent = { Text("Link this Shield to your Plex account") },
+                    )
+                }
+                else -> item {
+                    ListItem(
+                        selected = false,
+                        onClick = { scope.launch { plexSession.discoverServers() } },
+                        headlineContent = { Text("Reconnect to Plex") },
+                    )
+                }
             }
-            SettingRow("Audio passthrough (needs AV receiver)", settings.audioPassthrough) {
-                scope.launch { repository.setAudioPassthrough(it) }
+
+            item { SectionLabel("Playback") }
+            item {
+                SettingRow("Match display frame rate", settings.autoFrameRate) {
+                    scope.launch { repository.setAutoFrameRate(it) }
+                }
             }
-            SettingRow("Show playback stats overlay", settings.showStatsOverlay) {
-                scope.launch { repository.setShowStatsOverlay(it) }
+            item {
+                SettingRow("Audio passthrough (needs AV receiver)", settings.audioPassthrough) {
+                    scope.launch { repository.setAudioPassthrough(it) }
+                }
             }
-            ListItem(
-                selected = false,
-                onClick = onOpenPlayerTest,
-                headlineContent = { Text("Player test streams", style = MaterialTheme.typography.titleMedium) },
-                supportingContent = { Text("Try codecs, subtitles and streaming formats") },
-                modifier = Modifier.fillMaxWidth(0.6f).padding(top = 16.dp),
-            )
+            item {
+                SettingRow("Show playback stats overlay", settings.showStatsOverlay) {
+                    scope.launch { repository.setShowStatsOverlay(it) }
+                }
+            }
+
+            item { SectionLabel("Developer") }
+            item {
+                ListItem(
+                    selected = false,
+                    onClick = onOpenPlayerTest,
+                    headlineContent = { Text("Player test streams") },
+                    supportingContent = { Text("Try codecs, subtitles and streaming formats") },
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = ShieldColors.OnSurfaceFaint,
+        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 4.dp),
+    )
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -86,8 +139,7 @@ private fun SettingRow(label: String, checked: Boolean, onChange: (Boolean) -> U
     ListItem(
         selected = false,
         onClick = { onChange(!checked) },
-        headlineContent = { Text(label, style = MaterialTheme.typography.titleMedium) },
+        headlineContent = { Text(label) },
         trailingContent = { Switch(checked = checked, onCheckedChange = null) },
-        modifier = Modifier.fillMaxWidth(0.6f),
     )
 }

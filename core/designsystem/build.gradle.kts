@@ -26,6 +26,7 @@ dependencies {
     api(libs.androidx.compose.foundation)
     api(libs.androidx.tv.material)
     api(libs.androidx.compose.material.icons.extended)
+    api(libs.coil.compose)
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

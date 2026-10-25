@@ -115,6 +115,7 @@ fun PlayerScreen(
     title: String,
     config: PlaybackConfig,
     onExit: () -> Unit,
+    startPositionMs: Long = 0L,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -196,7 +197,7 @@ fun PlayerScreen(
         }
         player.addListener(listener)
         player.addAnalyticsListener(stats)
-        player.setMediaItem(MediaItem.fromUri(uri))
+        player.setMediaItem(MediaItem.fromUri(uri), startPositionMs)
         player.prepare()
         player.playWhenReady = true
         onDispose {

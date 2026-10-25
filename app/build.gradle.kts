@@ -31,6 +31,8 @@ android {
 dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:player"))
+    implementation(project(":plex:data"))
+    implementation(project(":plex:ui"))
 
     val bom = platform(libs.androidx.compose.bom)
     implementation(bom)
@@ -41,5 +43,6 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    implementation(libs.okhttp)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
