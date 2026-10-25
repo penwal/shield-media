@@ -24,7 +24,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.ListItem
+import com.logan.shieldmedia.designsystem.ShieldListItem
 import androidx.tv.material3.Text
 import com.logan.shieldmedia.designsystem.ScreenTitle
 import com.logan.shieldmedia.navigation.PlayHandler
@@ -223,7 +223,7 @@ fun PlayerTestScreen(onPlay: PlayHandler) {
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             itemsIndexed(testStreams) { index, stream ->
-                ListItem(
+                ShieldListItem(
                     selected = false,
                     onClick = {
                         focusedIndex = index

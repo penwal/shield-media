@@ -15,7 +15,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.ListItem
+import com.logan.shieldmedia.designsystem.ShieldListItem
+import com.logan.shieldmedia.designsystem.fadingEdges
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
@@ -86,7 +87,7 @@ fun SettingsScreen(
         Column(Modifier.fillMaxSize().focusProperties { onEnter = { if (askPin) cancelFocusChange() } }.focusGroup()) {
             ScreenTitle("Settings")
             LazyColumn(
-                Modifier.width(640.dp),
+                Modifier.width(640.dp).fadingEdges(),
                 contentPadding = PaddingValues(start = Spacing.ScreenH, bottom = 48.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -94,7 +95,7 @@ fun SettingsScreen(
                 when (val s = plexState) {
                     is PlexState.Ready -> {
                         item {
-                            ListItem(
+                            ShieldListItem(
                                 selected = false,
                                 onClick = { scope.launch { plexSession.discoverServers() } },
                                 headlineContent = { Text("Server: ${s.server.name}") },
@@ -102,7 +103,7 @@ fun SettingsScreen(
                             )
                         }
                         item {
-                            ListItem(
+                            ShieldListItem(
                                 selected = false,
                                 onClick = onPlexProfiles,
                                 headlineContent = { Text("Switch profile") },
@@ -110,7 +111,7 @@ fun SettingsScreen(
                             )
                         }
                         item {
-                            ListItem(
+                            ShieldListItem(
                                 selected = false,
                                 onClick = { scope.launch { plexSession.signOut() } },
                                 headlineContent = { Text("Sign out of Plex") },
@@ -118,7 +119,7 @@ fun SettingsScreen(
                         }
                     }
                     PlexState.SignedOut -> item {
-                        ListItem(
+                        ShieldListItem(
                             selected = false,
                             onClick = onPlexSignIn,
                             headlineContent = { Text("Sign in with Plex") },
@@ -126,7 +127,7 @@ fun SettingsScreen(
                         )
                     }
                     else -> item {
-                        ListItem(
+                        ShieldListItem(
                             selected = false,
                             onClick = { scope.launch { plexSession.discoverServers() } },
                             headlineContent = { Text("Reconnect to Plex") },
@@ -136,7 +137,7 @@ fun SettingsScreen(
 
                 item { SectionLabel("Live TV") }
                 item {
-                    ListItem(
+                    ShieldListItem(
                         selected = false,
                         onClick = onOpenIptvSources,
                         headlineContent = { Text("Live TV sources") },
@@ -145,7 +146,7 @@ fun SettingsScreen(
                 }
                 item {
                     // Cycles Fast -> Balanced -> Stable.
-                    ListItem(
+                    ShieldListItem(
                         selected = false,
                         onClick = {
                             val next = LiveBuffer.entries[(settings.liveBuffer.ordinal + 1) % LiveBuffer.entries.size]
@@ -165,7 +166,7 @@ fun SettingsScreen(
                         }
                     }
                     item {
-                        ListItem(
+                        ShieldListItem(
                             selected = false,
                             // Turning the lock off needs the PIN, or it wouldn't be much of a lock.
                             onClick = { if (hasPin) askPin = true },
@@ -183,8 +184,8 @@ fun SettingsScreen(
 
                 item { SectionLabel("Playback") }
                 item {
-                    ListItem(
-                        selected = true,
+                    ShieldListItem(
+                        selected = false,
                         onClick = {},
                         headlineContent = { Text("Plex quality: Original") },
                         supportingContent = { Text("Always direct play the original file. Transcoding is only a last resort.") },
@@ -208,7 +209,7 @@ fun SettingsScreen(
 
                 item { SectionLabel("Developer") }
                 item {
-                    ListItem(
+                    ShieldListItem(
                         selected = false,
                         onClick = onOpenPlayerTest,
                         headlineContent = { Text("Player test streams") },
@@ -255,7 +256,7 @@ private fun SectionLabel(text: String) {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SettingRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    ListItem(
+    ShieldListItem(
         selected = false,
         onClick = { onChange(!checked) },
         headlineContent = { Text(label) },

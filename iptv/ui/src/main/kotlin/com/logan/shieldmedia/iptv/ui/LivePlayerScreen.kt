@@ -76,7 +76,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.ListItem
+import com.logan.shieldmedia.designsystem.ShieldListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -468,7 +468,7 @@ private fun MiniGuide(
         LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             itemsIndexed(channels, key = { _, ch -> ch.id }) { i, ch ->
                 val onNow = ch.epgId?.let { nowNext[it] }?.firstOrNull { it.isAiring(now) }
-                ListItem(
+                ShieldListItem(
                     selected = i == currentIndex,
                     onClick = { onPick(i) },
                     leadingContent = {

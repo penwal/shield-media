@@ -22,7 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.FilterChip
+import com.logan.shieldmedia.designsystem.ShieldChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.logan.shieldmedia.designsystem.FocusMemory
@@ -164,7 +164,7 @@ private fun SectionChips(sections: List<LibrarySection>, selected: LibrarySectio
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         sections.forEach { section ->
-            FilterChip(
+            ShieldChip(
                 selected = section == selected,
                 onClick = { onSelect(section) },
             ) { Text(section.title) }

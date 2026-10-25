@@ -11,7 +11,7 @@
         android:name=".ShieldMediaApp"
         android:allowBackup="true"
         android:banner="@drawable/banner"
-        android:icon="@drawable/banner"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"

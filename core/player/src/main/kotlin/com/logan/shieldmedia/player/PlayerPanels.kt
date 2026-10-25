@@ -20,7 +20,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.ListItem
+import com.logan.shieldmedia.designsystem.ShieldListItem
+import com.logan.shieldmedia.designsystem.fadingEdges
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.logan.shieldmedia.designsystem.ShieldColors
@@ -71,7 +72,7 @@ fun OptionsPanel(title: String, rows: List<PanelRow>, emptyText: String) {
         if (options.isEmpty()) {
             Text(emptyText, color = ShieldColors.OnSurfaceMuted, modifier = Modifier.padding(12.dp))
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        LazyColumn(Modifier.fadingEdges(top = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             itemsIndexed(rows) { _, row ->
                 when (row) {
                     is PanelRow.Header -> Text(
@@ -80,7 +81,7 @@ fun OptionsPanel(title: String, rows: List<PanelRow>, emptyText: String) {
                         color = ShieldColors.OnSurfaceFaint,
                         modifier = Modifier.padding(start = 12.dp, top = 16.dp, bottom = 4.dp),
                     )
-                    is PanelRow.Option -> ListItem(
+                    is PanelRow.Option -> ShieldListItem(
                         selected = row.selected,
                         onClick = row.onClick,
                         onLongClick = row.onLongClick,

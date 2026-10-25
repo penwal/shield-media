@@ -55,7 +55,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.FilterChip
+import com.logan.shieldmedia.designsystem.ShieldChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -153,7 +153,7 @@ private fun Guide(vm: GuideViewModel, channels: List<Channel>, onPlay: LivePlayH
                 Modifier.fillMaxWidth().padding(start = Spacing.ScreenH, end = 24.dp, top = 4.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                FilterChip(
+                ShieldChip(
                     selected = false,
                     onClick = { groupPanel = true },
                     modifier = Modifier.width(ChannelColumn - 16.dp).focusRequester(chipFocus),

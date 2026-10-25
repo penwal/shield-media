@@ -19,7 +19,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.ListItem
+import com.logan.shieldmedia.designsystem.ShieldListItem
 import androidx.tv.material3.Text
 import com.logan.shieldmedia.designsystem.LocalContentFocusGate
 import com.logan.shieldmedia.designsystem.MessageState
@@ -102,7 +102,7 @@ private fun ServerPicker(state: PlexState.ChooseServer, onPick: (com.logan.shiel
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 items(state.servers, key = { it.clientIdentifier }) { server ->
-                    ListItem(
+                    ShieldListItem(
                         selected = false,
                         onClick = { onPick(server) },
                         headlineContent = { Text(server.name) },

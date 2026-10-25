@@ -34,7 +34,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.FilterChip
+import com.logan.shieldmedia.designsystem.ShieldChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.logan.shieldmedia.designsystem.Backdrop
@@ -189,14 +189,14 @@ fun IptvVodScreen(repo: IptvVodRepository, onOpen: VodOpenHandler, onPlay: VodPl
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FilterChip(selected = vm.kind == VodKind.MOVIE, onClick = { vm.select(VodKind.MOVIE) }) { Text("Movies") }
-                    FilterChip(selected = vm.kind == VodKind.SERIES, onClick = { vm.select(VodKind.SERIES) }) { Text("Series") }
+                    ShieldChip(selected = vm.kind == VodKind.MOVIE, onClick = { vm.select(VodKind.MOVIE) }) { Text("Movies") }
+                    ShieldChip(selected = vm.kind == VodKind.SERIES, onClick = { vm.select(VodKind.SERIES) }) { Text("Series") }
                 }
                 vm.categories?.takeIf { it.isNotEmpty() }?.let { cats ->
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        item { FilterChip(selected = vm.category == null, onClick = { vm.select(null) }) { Text("All") } }
+                        item { ShieldChip(selected = vm.category == null, onClick = { vm.select(null) }) { Text("All") } }
                         items(cats, key = { it.id }) { c ->
-                            FilterChip(selected = vm.category == c, onClick = { vm.select(c) }) { Text(c.name) }
+                            ShieldChip(selected = vm.category == c, onClick = { vm.select(c) }) { Text(c.name) }
                         }
                     }
                 }
@@ -333,7 +333,7 @@ fun IptvVodDetailsScreen(repo: IptvVodRepository, item: VodItem, onPlay: VodPlay
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 ) {
                                     s.seasons.keys.sorted().forEach { n ->
-                                        FilterChip(
+                                        ShieldChip(
                                             selected = vm.season == n,
                                             onClick = { vm.season = n },
                                             modifier = Modifier.focusMemory(vm.focus, "season-$n"),

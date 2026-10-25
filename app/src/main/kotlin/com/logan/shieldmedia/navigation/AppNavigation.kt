@@ -37,6 +37,9 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.draw.drawWithContent
+import androidx.tv.material3.DrawerValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
@@ -277,13 +280,30 @@ private fun MainScaffold(
                 lastKeyAt = SystemClock.uptimeMillis()
                 false
             },
-            scrimBrush = Brush.horizontalGradient(
-                listOf(ShieldColors.Background.copy(alpha = 0.92f), ShieldColors.Background.copy(alpha = 0.4f)),
-            ),
-            drawerContent = {
+            // Even dim behind the open menu; the menu itself is a solid panel, so nothing shows through.
+            scrimBrush = SolidColor(Color.Black.copy(alpha = 0.6f)),
+            drawerContent = { drawerValue ->
+                val open = drawerValue == DrawerValue.Open
                 Column(
                     Modifier
                         .fillMaxHeight()
+                        .background(if (open) ShieldColors.Surface else ShieldColors.Background)
+                        .drawWithContent {
+                            drawContent()
+                            if (open) {
+                                // Hairline edge plus a soft shadow falling onto the dimmed content.
+                                drawRect(ShieldColors.Hairline, topLeft = Offset(size.width - 1.dp.toPx(), 0f), size = Size(1.dp.toPx(), size.height))
+                                drawRect(
+                                    Brush.horizontalGradient(
+                                        listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent),
+                                        startX = size.width,
+                                        endX = size.width + 24.dp.toPx(),
+                                    ),
+                                    topLeft = Offset(size.width, 0f),
+                                    size = Size(24.dp.toPx(), size.height),
+                                )
+                            }
+                        }
                         .onFocusChanged {
                             if (it.hasFocus && !drawerHasFocus) {
                                 drawerEnteredByUser = SystemClock.uptimeMillis() - lastKeyAt < 500

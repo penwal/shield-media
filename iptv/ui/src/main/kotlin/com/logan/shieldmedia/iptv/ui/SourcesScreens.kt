@@ -26,8 +26,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.FilterChip
-import androidx.tv.material3.ListItem
+import com.logan.shieldmedia.designsystem.ShieldChip
+import com.logan.shieldmedia.designsystem.ShieldListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.logan.shieldmedia.designsystem.PrimaryButton
@@ -67,7 +67,7 @@ fun IptvSourcesScreen(repo: IptvRepository, onAdd: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             item {
-                ListItem(
+                ShieldListItem(
                     selected = false,
                     onClick = onAdd,
                     headlineContent = { Text("Add a source") },
@@ -76,7 +76,7 @@ fun IptvSourcesScreen(repo: IptvRepository, onAdd: () -> Unit) {
                 )
             }
             items(playlists, key = { it.id }) { p ->
-                ListItem(
+                ShieldListItem(
                     selected = p.id == active,
                     onClick = { repo.setActive(p.id) },
                     onLongClick = { scope.launch { repo.sync(p.id, force = true) } },
@@ -172,12 +172,12 @@ fun AddIptvSourceScreen(repo: IptvRepository, onDone: () -> Unit) {
         item { ScreenTitle("Add a source", "Your provider's details are stored only on this device.") }
         item {
             Row(Modifier.padding(horizontal = Spacing.ScreenH, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                FilterChip(
+                ShieldChip(
                     selected = type == PlaylistType.XTREAM,
                     onClick = { type = PlaylistType.XTREAM },
                     modifier = Modifier.focusRequester(first),
                 ) { Text("Xtream Codes") }
-                FilterChip(selected = type == PlaylistType.M3U, onClick = { type = PlaylistType.M3U }) { Text("M3U playlist") }
+                ShieldChip(selected = type == PlaylistType.M3U, onClick = { type = PlaylistType.M3U }) { Text("M3U playlist") }
             }
         }
         item {
