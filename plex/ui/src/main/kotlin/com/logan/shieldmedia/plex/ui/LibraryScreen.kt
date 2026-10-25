@@ -271,6 +271,12 @@ fun PlexLibraryScreen(env: PlexEnv, sectionKey: String, title: String, onOpen: (
 /** The caption under each poster reflects the active sort, so the order makes sense. */
 private fun subtitleFor(item: PlexItem, sort: LibrarySort): String? = when (sort) {
     LibrarySort.Rating -> item.audienceRating?.let { "★ %.1f".format(it) } ?: item.year?.toString()
-    LibrarySort.Released -> item.originallyAvailableAt ?: item.year?.toString()
+    LibrarySort.Released -> item.originallyAvailableAt?.let(::prettyDate) ?: item.year?.toString()
     else -> item.year?.toString()
 }
+
+/** "2018-04-27" -> "Apr 27, 2018" in the device's language. */
+private fun prettyDate(iso: String): String = runCatching {
+    java.time.LocalDate.parse(iso.take(10))
+        .format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM))
+}.getOrDefault(iso)
