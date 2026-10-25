@@ -170,7 +170,7 @@ fun IptvVodScreen(repo: IptvVodRepository, onOpen: VodOpenHandler, onPlay: VodPl
     val items = vm.items
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(6),
+        columns = GridCells.Adaptive(118.dp),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = Spacing.ScreenH, end = Spacing.ScreenH, bottom = 80.dp),
         horizontalArrangement = Arrangement.spacedBy(Spacing.CardGap),

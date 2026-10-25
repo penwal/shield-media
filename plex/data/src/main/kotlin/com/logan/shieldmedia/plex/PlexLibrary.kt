@@ -26,13 +26,32 @@ class PlexLibrary(private val session: PlexSession) {
     suspend fun sections(server: ActiveServer): List<LibrarySection> =
         server.container("/library/sections").directories
 
-    suspend fun sectionItems(server: ActiveServer, sectionKey: String, start: Int, size: Int): MediaContainer =
-        server.container(
-            "/library/sections/$sectionKey/all",
-            "sort" to "titleSort",
+    /**
+     * One page of a library. [sort] is a Plex sort key such as "addedAt:desc"; [genreKey] comes
+     * from [genres]; [unwatched] hides anything already watched.
+     */
+    suspend fun sectionItems(
+        server: ActiveServer,
+        sectionKey: String,
+        start: Int,
+        size: Int,
+        sort: String = "titleSort",
+        genreKey: String? = null,
+        unwatched: Boolean = false,
+    ): MediaContainer {
+        val query = mutableListOf<Pair<String, Any>>(
+            "sort" to sort,
             "X-Plex-Container-Start" to start,
             "X-Plex-Container-Size" to size,
         )
+        genreKey?.let { query += "genre" to it }
+        if (unwatched) query += "unwatched" to 1
+        return server.container("/library/sections/$sectionKey/all", *query.toTypedArray())
+    }
+
+    /** Genres present in a library, for filtering. */
+    suspend fun genres(server: ActiveServer, sectionKey: String): List<LibrarySection> =
+        server.container("/library/sections/$sectionKey/genre").directories
 
     suspend fun item(server: ActiveServer, ratingKey: String): PlexItem? =
         server.container("/library/metadata/$ratingKey", "includeImages" to 1, "includeMarkers" to 1)

@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.logan.shieldmedia.plex.PlexState
 import com.logan.shieldmedia.settings.LiveBuffer
+import com.logan.shieldmedia.settings.UiSize
 import com.logan.shieldmedia.settings.PlayerSettings
 import com.logan.shieldmedia.settings.SettingsRepository
 import kotlinx.coroutines.launch
@@ -182,7 +183,22 @@ fun SettingsScreen(
                     }
                 }
 
-                item { SectionLabel("Playback") }
+                item { SectionLabel("Display") }
+            item {
+                // Cycles Standard -> Compact -> Large.
+                ShieldListItem(
+                    selected = false,
+                    onClick = {
+                        val order = listOf(UiSize.Standard, UiSize.Compact, UiSize.Large)
+                        val next = order[(order.indexOf(settings.uiSize) + 1) % order.size]
+                        scope.launch { repository.setUiSize(next) }
+                    },
+                    headlineContent = { Text("Interface size: ${settings.uiSize.label}") },
+                    supportingContent = { Text("Makes text, posters and menus smaller or larger") },
+                )
+            }
+
+            item { SectionLabel("Playback") }
                 item {
                     ShieldListItem(
                         selected = false,

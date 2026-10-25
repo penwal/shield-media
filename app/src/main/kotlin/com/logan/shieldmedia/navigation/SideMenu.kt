@@ -58,11 +58,12 @@ private val ItemShape = RoundedCornerShape(50)
 fun NavigationDrawerScope.SideMenu(
     drawerValue: DrawerValue,
     currentSection: String?,
+    libraries: List<MenuEntry>,
     profileName: String?,
     profileImage: String?,
     currentFocus: FocusRequester,
     modifier: Modifier = Modifier,
-    onSelect: (Destination) -> Unit,
+    onSelect: (MenuEntry) -> Unit,
     onProfile: () -> Unit,
 ) {
     val open = drawerValue == DrawerValue.Open
@@ -101,20 +102,23 @@ fun NavigationDrawerScope.SideMenu(
         Brand(open)
         Spacer(Modifier.height(18.dp))
 
-        Section(open, null)
-        MenuItem(Destination.Search, currentSection, currentFocus, onSelect)
-        MenuItem(Destination.Home, currentSection, currentFocus, onSelect)
-        MenuItem(Destination.Movies, currentSection, currentFocus, onSelect)
-        MenuItem(Destination.Shows, currentSection, currentFocus, onSelect)
+        MenuItem(Destination.Search.asEntry(), currentSection, currentFocus, onSelect)
+        MenuItem(Destination.Home.asEntry(), currentSection, currentFocus, onSelect)
+
+        // One entry per Plex library (Blu-Ray, Movies, TV Shows...), straight from the server.
+        if (libraries.isNotEmpty()) {
+            Section(open, "Library")
+            libraries.forEach { MenuItem(it, currentSection, currentFocus, onSelect) }
+        }
 
         Section(open, "Live TV")
-        MenuItem(Destination.LiveTv, currentSection, currentFocus, onSelect)
-        MenuItem(Destination.IptvVod, currentSection, currentFocus, onSelect)
+        MenuItem(Destination.LiveTv.asEntry(), currentSection, currentFocus, onSelect)
+        MenuItem(Destination.IptvVod.asEntry(), currentSection, currentFocus, onSelect)
 
         Spacer(Modifier.weight(1f))
         Section(open, "Account")
         ProfileItem(profileName, profileImage, onProfile)
-        MenuItem(Destination.Settings, currentSection, currentFocus, onSelect)
+        MenuItem(Destination.Settings.asEntry(), currentSection, currentFocus, onSelect)
     }
 }
 
@@ -164,12 +168,12 @@ private fun ColumnScope.Section(open: Boolean, title: String?) {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun NavigationDrawerScope.MenuItem(
-    dest: Destination,
+    dest: MenuEntry,
     currentSection: String?,
     currentFocus: FocusRequester,
-    onSelect: (Destination) -> Unit,
+    onSelect: (MenuEntry) -> Unit,
 ) {
-    val selected = currentSection == dest.route
+    val selected = currentSection == dest.id
     NavigationDrawerItem(
         selected = selected,
         onClick = { onSelect(dest) },

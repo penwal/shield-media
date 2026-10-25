@@ -28,6 +28,11 @@ class FocusMemory {
     internal fun remember(key: Any) {
         this.key = key
     }
+
+    /** Start over at the default item (e.g. after the list was re-sorted). */
+    fun forget() {
+        key = null
+    }
 }
 
 /**

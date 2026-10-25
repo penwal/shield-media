@@ -95,6 +95,7 @@ private const val PLEX_PROFILES_ROUTE = "plex_profiles"
 private const val PLEX_PLAY_ROUTE = "plex_play/{ratingKey}?fromStart={fromStart}"
 private const val PLAYER_TEST_ROUTE = "player_test"
 private const val PLEX_ITEM_ROUTE = "plex/item/{ratingKey}"
+private const val LIBRARY_ROUTE = "library/{key}?title={title}"
 private const val IPTV_SOURCES_ROUTE = "iptv/sources"
 private const val IPTV_ADD_ROUTE = "iptv/add"
 private const val VOD_DETAILS_ROUTE = "iptv/vod/details"
@@ -241,12 +242,16 @@ private fun MainScaffold(
 ) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
-    val currentRoute = backStack?.destination?.route
+    // Library screens share one route pattern; identify them by their section key.
+    val currentRoute = backStack?.destination?.route?.let { route ->
+        if (route == LIBRARY_ROUTE) "library/${backStack?.arguments?.getString("key")}" else route
+    }
 
     // Sub-screens (details, player test) keep highlighting the section they were opened from.
     var lastSection by rememberSaveable { mutableStateOf(Destination.Home.route) }
-    val topLevel = Destination.entries.firstOrNull { it.route == currentRoute }
-    LaunchedEffect(topLevel) { topLevel?.let { lastSection = it.route } }
+    val isTopLevel = currentRoute != null &&
+        (Destination.entries.any { it.route == currentRoute } || currentRoute.startsWith("library/"))
+    LaunchedEffect(currentRoute) { if (isTopLevel) lastSection = currentRoute!! }
 
     // Picking a drawer entry keeps focus in the drawer (TV convention). Any other navigation —
     // app start, opening a sub-screen, Back — must land focus in the content, not on "Home".
@@ -281,6 +286,20 @@ private fun MainScaffold(
         }
     }
     val scope = rememberCoroutineScope()
+    // Plex libraries for the menu: movie and show libraries, in the server's order.
+    val libraries by androidx.compose.runtime.produceState(emptyList<MenuEntry>(), plexState) {
+        val server = (plexState as? com.logan.shieldmedia.plex.PlexState.Ready)?.server
+        value = if (server == null) emptyList() else runCatching {
+            container.plexLibrary.sections(server).filter { it.type == "movie" || it.type == "show" }.map { s ->
+                MenuEntry(
+                    id = "library/${s.key}",
+                    label = s.title,
+                    icon = if (s.type == "show") com.logan.shieldmedia.designsystem.ShieldIcons.Shows else com.logan.shieldmedia.designsystem.ShieldIcons.Movies,
+                    target = "library/${s.key}?title=${Uri.encode(s.title)}",
+                )
+            }
+        }.getOrDefault(emptyList())
+    }
 
     val openItem: (PlexItem) -> Unit = { navController.navigate("plex/item/${it.ratingKey}") }
     val plex: @Composable (@Composable (com.logan.shieldmedia.plex.ui.PlexEnv) -> Unit) -> Unit = { screen ->
@@ -299,6 +318,7 @@ private fun MainScaffold(
                 SideMenu(
                     drawerValue = drawerValue,
                     currentSection = lastSection,
+                    libraries = libraries,
                     profileName = profile?.first,
                     profileImage = profile?.second,
                     currentFocus = drawerFocus,
@@ -313,9 +333,9 @@ private fun MainScaffold(
                         .focusProperties { onEnter = { drawerFocus.requestFocus() } }
                         .focusGroup(),
                     onSelect = { dest ->
-                        if (currentRoute != dest.route) {
+                        if (currentRoute != dest.id) {
                             navigatedFromDrawer = true
-                            navController.navigate(dest.route) {
+                            navController.navigate(dest.target) {
                                 popUpTo(Destination.Home.route)
                                 launchSingleTop = true
                             }
@@ -342,11 +362,16 @@ private fun MainScaffold(
                     composable(Destination.Home.route) {
                         plex { env -> PlexHomeScreen(env, onOpen = openItem, onPlay = onPlayPlex) }
                     }
-                    composable(Destination.Movies.route) {
-                        plex { env -> PlexLibraryScreen(env, sectionType = "movie", title = "Movies", onOpen = openItem) }
-                    }
-                    composable(Destination.Shows.route) {
-                        plex { env -> PlexLibraryScreen(env, sectionType = "show", title = "TV Shows", onOpen = openItem) }
+                    composable(
+                        LIBRARY_ROUTE,
+                        arguments = listOf(
+                            navArgument("key") { type = NavType.StringType },
+                            navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                        ),
+                    ) { entry ->
+                        val key = entry.arguments?.getString("key").orEmpty()
+                        val title = entry.arguments?.getString("title").orEmpty()
+                        plex { env -> PlexLibraryScreen(env, sectionKey = key, title = title, onOpen = openItem) }
                     }
                     composable(Destination.LiveTv.route) {
                         LiveGuideScreen(
@@ -400,7 +425,7 @@ private fun MainScaffold(
                 }
             }
             // Android TV Back convention: content -> drawer -> Home -> exit.
-            BackHandler(enabled = topLevel != null && !drawerHasFocus) {
+            BackHandler(enabled = isTopLevel && !drawerHasFocus) {
                 runCatching { drawerFocus.requestFocus() }
             }
             BackHandler(enabled = drawerHasFocus && currentRoute != Destination.Home.route) {

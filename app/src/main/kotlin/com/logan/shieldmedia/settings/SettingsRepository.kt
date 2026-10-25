@@ -17,7 +17,15 @@ data class PlayerSettings(
     val audioPassthrough: Boolean = false,
     val showStatsOverlay: Boolean = false,
     val liveBuffer: LiveBuffer = LiveBuffer.Balanced,
+    val uiSize: UiSize = UiSize.Standard,
 )
+
+/** Overall interface size. Everything (text, cards, menus) scales together. */
+enum class UiSize(val label: String, val scale: Float) {
+    Compact("Compact", 0.75f),
+    Standard("Standard", 0.85f),
+    Large("Large", 1.0f),
+}
 
 enum class LiveBuffer(val label: String, val millis: Int, val detail: String) {
     Fast("Fast", 1_000, "Quickest channel changes; may stutter on weaker streams"),
@@ -31,6 +39,7 @@ class SettingsRepository(private val context: Context) {
         val AudioPassthrough = booleanPreferencesKey("audio_passthrough")
         val StatsOverlay = booleanPreferencesKey("stats_overlay")
         val LiveBufferKey = intPreferencesKey("live_buffer")
+        val UiSizeKey = intPreferencesKey("ui_size")
     }
 
     val playerSettings: Flow<PlayerSettings> = context.dataStore.data.map { p ->
@@ -39,6 +48,7 @@ class SettingsRepository(private val context: Context) {
             audioPassthrough = p[Keys.AudioPassthrough] ?: false,
             showStatsOverlay = p[Keys.StatsOverlay] ?: false,
             liveBuffer = LiveBuffer.entries.getOrNull(p[Keys.LiveBufferKey] ?: -1) ?: LiveBuffer.Balanced,
+            uiSize = UiSize.entries.getOrNull(p[Keys.UiSizeKey] ?: -1) ?: UiSize.Standard,
         )
     }
 
@@ -48,6 +58,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setAudioPassthrough(value: Boolean) {
         context.dataStore.edit { it[Keys.AudioPassthrough] = value }
+    }
+
+    suspend fun setUiSize(value: UiSize) {
+        context.dataStore.edit { it[Keys.UiSizeKey] = value.ordinal }
     }
 
     suspend fun setLiveBuffer(value: LiveBuffer) {
