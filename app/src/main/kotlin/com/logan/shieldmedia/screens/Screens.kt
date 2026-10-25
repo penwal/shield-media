@@ -42,13 +42,14 @@ fun SettingsScreen(
     repository: SettingsRepository,
     plexSession: PlexSession,
     onPlexSignIn: () -> Unit,
+    onPlexProfiles: () -> Unit,
     onOpenIptvSources: () -> Unit,
     onOpenPlayerTest: () -> Unit,
 ) {
     val settings by repository.playerSettings.collectAsState(initial = PlayerSettings())
     val plexState by plexSession.state.collectAsState()
     val plexUser by produceState<String?>(null, plexState) {
-        value = if (plexState is PlexState.Ready) plexSession.user()?.let { it.title ?: it.username } else null
+        value = if (plexState is PlexState.Ready) plexSession.currentProfileName() ?: plexSession.user()?.let { it.title ?: it.username } else null
     }
     val scope = rememberCoroutineScope()
 
@@ -68,6 +69,14 @@ fun SettingsScreen(
                             onClick = { scope.launch { plexSession.discoverServers() } },
                             headlineContent = { Text("Server: ${s.server.name}") },
                             supportingContent = { Text(listOfNotNull(plexUser, "Select to switch servers").joinToString("  ·  ")) },
+                        )
+                    }
+                    item {
+                        ListItem(
+                            selected = false,
+                            onClick = onPlexProfiles,
+                            headlineContent = { Text("Switch profile") },
+                            supportingContent = { Text(plexUser?.let { "Watching as $it" } ?: "Plex Home users") },
                         )
                     }
                     item {

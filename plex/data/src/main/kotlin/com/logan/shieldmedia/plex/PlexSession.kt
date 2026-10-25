@@ -51,6 +51,9 @@ class PlexSession(context: Context, okHttp: OkHttpClient) {
     private object Keys {
         val ClientId = stringPreferencesKey("client_id")
         val AuthToken = stringPreferencesKey("auth_token")
+        /** The token from signing in; profile switches are requested with it. */
+        val AccountToken = stringPreferencesKey("account_token")
+        val ProfileName = stringPreferencesKey("profile_name")
         val ServerId = stringPreferencesKey("server_id")
         val ServerName = stringPreferencesKey("server_name")
         val ServerUri = stringPreferencesKey("server_uri")
@@ -87,8 +90,49 @@ class PlexSession(context: Context, okHttp: OkHttpClient) {
     suspend fun checkPin(pin: PlexPin): Boolean {
         val result = http.get("https://plex.tv/api/v2/pins/${pin.id}".toHttpUrl(), clientInfo, null, PlexPin.serializer())
         val token = result.authToken ?: return false
-        store.edit { it[Keys.AuthToken] = token }
+        store.edit {
+            it[Keys.AuthToken] = token
+            it[Keys.AccountToken] = token
+        }
         discoverServers(preferredId = null)
+        return true
+    }
+
+    // ---- Plex Home profiles ----
+
+    suspend fun homeUsers(): List<PlexHomeUser> {
+        val prefs = store.data.first()
+        val token = prefs[Keys.AccountToken] ?: prefs[Keys.AuthToken] ?: return emptyList()
+        return runCatching {
+            http.get("https://clients.plex.tv/api/v2/home/users".toHttpUrl(), clientInfo, token, PlexHomeUsers.serializer()).users
+        }.getOrDefault(emptyList())
+    }
+
+    suspend fun currentProfileName(): String? = store.data.first()[Keys.ProfileName]
+
+    /**
+     * Switches to another Home profile. Returns false for a wrong PIN. The server list is
+     * rediscovered because each profile gets its own access token for shared servers.
+     */
+    suspend fun switchProfile(user: PlexHomeUser, pin: String?): Boolean {
+        val prefs = store.data.first()
+        val accountToken = prefs[Keys.AccountToken] ?: prefs[Keys.AuthToken] ?: return false
+        val url = "https://clients.plex.tv/api/v2/home/users/${user.uuid}/switch".toHttpUrl().newBuilder()
+            .apply { if (!pin.isNullOrEmpty()) addQueryParameter("pin", pin) }
+            .build()
+        val result = try {
+            http.post(url, clientInfo, accountToken, PlexSwitchResult.serializer())
+        } catch (e: PlexException) {
+            if (e.code == 401 || e.code == 403 || e.code == 400) return false
+            throw e
+        }
+        val token = result.authToken ?: return false
+        store.edit {
+            if (it[Keys.AccountToken] == null) it[Keys.AccountToken] = accountToken
+            it[Keys.AuthToken] = token
+            it[Keys.ProfileName] = user.title
+        }
+        discoverServers(preferredId = prefs[Keys.ServerId])
         return true
     }
 
@@ -172,7 +216,10 @@ class PlexSession(context: Context, okHttp: OkHttpClient) {
 
     suspend fun signOut() {
         store.edit { prefs ->
-            listOf(Keys.AuthToken, Keys.ServerId, Keys.ServerName, Keys.ServerUri, Keys.ServerToken).forEach { prefs.remove(it) }
+            listOf(
+                Keys.AuthToken, Keys.AccountToken, Keys.ProfileName,
+                Keys.ServerId, Keys.ServerName, Keys.ServerUri, Keys.ServerToken,
+            ).forEach { prefs.remove(it) }
             prefs.remove(Keys.ServerOwned)
         }
         _state.value = PlexState.SignedOut

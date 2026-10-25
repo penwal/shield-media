@@ -62,6 +62,7 @@ import com.logan.shieldmedia.plex.ui.PlexGate
 import com.logan.shieldmedia.plex.ui.PlexHomeScreen
 import com.logan.shieldmedia.plex.ui.PlexLibraryScreen
 import com.logan.shieldmedia.plex.ui.PlexSearchScreen
+import com.logan.shieldmedia.plex.ui.PlexProfilesScreen
 import com.logan.shieldmedia.plex.ui.PlexSignInScreen
 import com.logan.shieldmedia.screens.PlaceholderScreen
 import com.logan.shieldmedia.screens.LiveRoute
@@ -80,6 +81,7 @@ import kotlinx.coroutines.launch
 private const val MAIN_ROUTE = "main"
 private const val PLAYER_ROUTE = "player?uri={uri}&title={title}&start={start}"
 private const val PLEX_SIGN_IN_ROUTE = "plex_sign_in"
+private const val PLEX_PROFILES_ROUTE = "plex_profiles"
 private const val PLEX_PLAY_ROUTE = "plex_play/{ratingKey}?fromStart={fromStart}"
 private const val PLAYER_TEST_ROUTE = "player_test"
 private const val PLEX_ITEM_ROUTE = "plex/item/{ratingKey}"
@@ -109,6 +111,7 @@ fun AppNavigation(container: AppContainer) {
                     rootNav.navigate("player?uri=${Uri.encode(uri)}&title=${Uri.encode(title)}&start=$startMs")
                 },
                 onPlexSignIn = { rootNav.navigate(PLEX_SIGN_IN_ROUTE) },
+                onPlexProfiles = { rootNav.navigate(PLEX_PROFILES_ROUTE) },
                 onPlayPlex = { ratingKey, fromStart -> rootNav.navigate("plex_play/$ratingKey?fromStart=$fromStart") },
                 onPlayLive = { channel, filter ->
                     rootNav.navigate("live?playlist=${channel.playlistId}&filter=${Uri.encode(filter.key)}&channel=${channel.id}")
@@ -162,6 +165,9 @@ fun AppNavigation(container: AppContainer) {
                 onExit = { rootNav.popBackStack() },
             )
         }
+        composable(PLEX_PROFILES_ROUTE) {
+            PlexProfilesScreen(container.plexSession, onDone = { rootNav.popBackStack() })
+        }
         composable(PLEX_SIGN_IN_ROUTE) {
             PlexSignInScreen(
                 session = container.plexSession,
@@ -178,6 +184,7 @@ private fun MainScaffold(
     container: AppContainer,
     onPlay: PlayHandler,
     onPlexSignIn: () -> Unit,
+    onPlexProfiles: () -> Unit,
     onPlayPlex: com.logan.shieldmedia.plex.ui.PlexPlayHandler,
     onPlayLive: LivePlayHandler,
 ) {
@@ -333,6 +340,7 @@ private fun MainScaffold(
                             repository = container.settings,
                             plexSession = container.plexSession,
                             onPlexSignIn = onPlexSignIn,
+                            onPlexProfiles = onPlexProfiles,
                             onOpenIptvSources = { navController.navigate(IPTV_SOURCES_ROUTE) },
                             onOpenPlayerTest = { navController.navigate(PLAYER_TEST_ROUTE) },
                         )

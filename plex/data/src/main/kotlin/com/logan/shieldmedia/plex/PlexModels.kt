@@ -47,6 +47,24 @@ data class PlexConnection(
     @SerialName("IPv6") val ipv6: Boolean = false,
 )
 
+/** A Plex Home profile. [protected] profiles need their PIN to switch to. */
+@Serializable
+data class PlexHomeUser(
+    val id: Long = 0,
+    val uuid: String = "",
+    val title: String = "",
+    val thumb: String? = null,
+    val admin: Boolean = false,
+    val protected: Boolean = false,
+    val restricted: Boolean = false,
+)
+
+@Serializable
+data class PlexHomeUsers(val users: List<PlexHomeUser> = emptyList())
+
+@Serializable
+internal data class PlexSwitchResult(val authToken: String? = null, val title: String? = null)
+
 // ---- Plex Media Server ----
 
 @Serializable
