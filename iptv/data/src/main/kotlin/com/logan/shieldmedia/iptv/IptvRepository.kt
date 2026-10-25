@@ -133,6 +133,7 @@ class IptvRepository(context: Context, okHttp: OkHttpClient) {
                     if (force || now - playlist.lastEpgSync > EPG_REFRESH_MS) {
                         _sync.value = SyncState.Running(playlist.name, "Loading TV guide")
                         guideError = runCatching { importGuide(id, playlist.userAgent, epgSource) }
+                            .onFailure { android.util.Log.w("IptvRepository", "Guide import failed", it) }
                             .onSuccess {
                                 store.markSynced(id, epg = true)
                                 _dataVersion.value++
@@ -143,6 +144,7 @@ class IptvRepository(context: Context, okHttp: OkHttpClient) {
                 load()
                 _sync.value = guideError?.let { SyncState.Failed(playlist.name, "TV guide: ${it.message}") } ?: SyncState.Idle
             }.onFailure {
+                android.util.Log.w("IptvRepository", "Sync failed for ${playlist.name}", it)
                 _sync.value = SyncState.Failed(playlist.name, it.message ?: "Sync failed")
             }
         }
@@ -177,7 +179,8 @@ class IptvRepository(context: Context, okHttp: OkHttpClient) {
         val writer = store.programWriter(playlistId)
         try {
             http.open(url, userAgent).use { stream ->
-                XmltvParser.parse(
+                parseGuideTolerant(writer) {
+                    XmltvParser.parse(
                     stream,
                     onChannel = { id, name ->
                         byName[name.normalizedName()]?.let { channelId ->
@@ -187,10 +190,11 @@ class IptvRepository(context: Context, okHttp: OkHttpClient) {
                             }
                         }
                     },
-                    onProgram = { channel, start, stop, title, desc ->
-                        if (channel in wanted && stop > from && start < to) writer.add(channel, start, stop, title, desc)
-                    },
-                )
+                        onProgram = { channel, start, stop, title, desc ->
+                            if (channel in wanted && stop > from && start < to) writer.add(channel, start, stop, title, desc)
+                        },
+                    )
+                }
             }
             writer.finish()
         } catch (e: Exception) {
@@ -198,6 +202,19 @@ class IptvRepository(context: Context, okHttp: OkHttpClient) {
             throw e
         }
         if (nameMatches.isNotEmpty()) store.assignEpgIds(nameMatches)
+    }
+
+    /**
+     * Guide files from panels sometimes end mid-document (the connection closes early). If we
+     * already have programmes, keep them rather than throwing the whole guide away.
+     */
+    private inline fun parseGuideTolerant(writer: ProgramWriter, parse: () -> Unit) {
+        try {
+            parse()
+        } catch (e: Exception) {
+            if (writer.count == 0) throw e
+            android.util.Log.w("IptvRepository", "Guide ended early; kept ${writer.count} programmes", e)
+        }
     }
 
     // ---- queries for the UI (call off the main thread) ----

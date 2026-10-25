@@ -41,11 +41,18 @@ internal class XtreamClient(private val http: IptvHttp, private val playlist: Pl
         return if (formats.isEmpty() || "ts" in formats) "ts" else formats.first()
     }
 
+    private suspend fun fetchList(action: String): JsonElement =
+        try {
+            parse(http.getString(api(action), playlist.userAgent))
+        } catch (e: IptvException) {
+            parse(http.getString(api(action), playlist.userAgent))
+        }
+
     suspend fun liveChannels(extension: String): List<ParsedChannel> {
-        val categories = parse(http.getString(api("get_live_categories"), playlist.userAgent)).asArray()
+        val categories = fetchList("get_live_categories").asArray()
             .mapNotNull { it as? JsonObject }
             .associate { it.str("category_id").orEmpty() to (it.str("category_name") ?: "Uncategorized") }
-        return parse(http.getString(api("get_live_streams"), playlist.userAgent)).asArray()
+        return fetchList("get_live_streams").asArray()
             .mapNotNull { it as? JsonObject }
             .mapNotNull { s ->
                 val id = s.str("stream_id") ?: return@mapNotNull null
@@ -64,10 +71,23 @@ internal class XtreamClient(private val http: IptvHttp, private val playlist: Pl
 
     fun epgUrl(): String = "$base/xmltv.php?username=$user&password=$pass"
 
-    private fun parse(body: String): JsonElement = try {
-        Json.parseToJsonElement(body)
-    } catch (e: Exception) {
+    private fun parse(body: String): JsonElement {
+        runCatching { return Json.parseToJsonElement(body) }
+        // Some panels close the connection before the last bytes of a list arrive (seen with
+        // XUI behind openresty: the closing "]" goes missing). Keep every complete entry.
+        repairTruncated(body)?.let { repaired ->
+            runCatching { return Json.parseToJsonElement(repaired) }
+        }
+        android.util.Log.w("XtreamClient", "Unparseable response (${body.length} chars): ${body.take(200)}")
         throw IptvException("The server sent an unexpected response.")
+    }
+
+    private fun repairTruncated(body: String): String? {
+        val text = body.trim()
+        if (!text.startsWith("[")) return null
+        val lastComplete = text.lastIndexOf('}')
+        if (lastComplete < 0) return "[]"
+        return text.substring(0, lastComplete + 1) + "]"
     }
 
     private fun JsonElement.asArray(): JsonArray = (this as? JsonArray) ?: (this as? JsonObject)?.values?.let { JsonArray(it.toList()) } ?: jsonArray
