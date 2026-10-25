@@ -29,6 +29,9 @@ class FocusMemory {
         this.key = key
     }
 
+    /** Put focus back on the remembered item (e.g. after a dialog closes). */
+    fun restore(): Boolean = runCatching { requester.requestFocus() }.getOrDefault(false)
+
     /** Start over at the default item (e.g. after the list was re-sorted). */
     fun forget() {
         key = null

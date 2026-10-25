@@ -66,6 +66,7 @@ import com.logan.shieldmedia.plex.ui.PlexGate
 import com.logan.shieldmedia.plex.ui.PlexHomeScreen
 import com.logan.shieldmedia.plex.ui.PlexLibraryScreen
 import com.logan.shieldmedia.plex.ui.PlexShowcaseScreen
+import com.logan.shieldmedia.plex.ui.PlexVaultScreen
 import com.logan.shieldmedia.plex.ui.isPremiumLibrary
 import com.logan.shieldmedia.plex.ui.PlexSearchScreen
 import com.logan.shieldmedia.plex.ui.PlexProfilesScreen
@@ -94,6 +95,8 @@ private const val MAIN_ROUTE = "main"
 private const val PLAYER_ROUTE = "player?uri={uri}&title={title}&start={start}"
 private const val PLEX_SIGN_IN_ROUTE = "plex_sign_in"
 private const val PLEX_PROFILES_ROUTE = "plex_profiles"
+private const val VAULT_ROUTE = "vault/{key}?title={title}"
+private const val VAULT_ITEM_ROUTE = "vault_item/{ratingKey}"
 private const val PLEX_PLAY_ROUTE = "plex_play/{ratingKey}?fromStart={fromStart}"
 private const val PLAYER_TEST_ROUTE = "player_test"
 private const val PLEX_ITEM_ROUTE = "plex/item/{ratingKey}"
@@ -137,6 +140,7 @@ private fun RootGraph(container: AppContainer, rootNav: androidx.navigation.NavH
                 },
                 onPlexSignIn = { rootNav.navigate(PLEX_SIGN_IN_ROUTE) },
                 onPlexProfiles = { rootNav.navigate(PLEX_PROFILES_ROUTE) },
+                onOpenVault = { target -> rootNav.navigate(target) },
                 onPlayPlex = { ratingKey, fromStart -> rootNav.navigate("plex_play/$ratingKey?fromStart=$fromStart") },
                 onPlayVod = { r ->
                     val e = { v: String? -> Uri.encode(v.orEmpty()) }
@@ -218,6 +222,39 @@ private fun RootGraph(container: AppContainer, rootNav: androidx.navigation.NavH
                 onExit = { rootNav.popBackStack() },
             )
         }
+        // Premium libraries (Blu-Ray) run full screen, outside the menu, with their own intro.
+        composable(
+            VAULT_ROUTE,
+            arguments = listOf(
+                navArgument("key") { type = NavType.StringType },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+            ),
+            enterTransition = { fadeIn(tween(400)) },
+            exitTransition = { fadeOut(tween(200)) },
+        ) { entry ->
+            val key = entry.arguments?.getString("key").orEmpty()
+            val title = entry.arguments?.getString("title").orEmpty()
+            PlexGate(container.plexSession, container.plexLibrary, onSignIn = { rootNav.navigate(PLEX_SIGN_IN_ROUTE) }) { env ->
+                PlexVaultScreen(
+                    env = env,
+                    sectionKey = key,
+                    title = title,
+                    onOpen = { rootNav.navigate("vault_item/${it.ratingKey}") },
+                    onExit = { rootNav.popBackStack() },
+                )
+            }
+        }
+        composable(VAULT_ITEM_ROUTE, arguments = listOf(navArgument("ratingKey") { type = NavType.StringType })) { entry ->
+            val ratingKey = entry.arguments?.getString("ratingKey").orEmpty()
+            PlexGate(container.plexSession, container.plexLibrary, onSignIn = { rootNav.navigate(PLEX_SIGN_IN_ROUTE) }) { env ->
+                PlexDetailsScreen(
+                    env,
+                    ratingKey,
+                    onOpen = { rootNav.navigate("vault_item/${it.ratingKey}") },
+                    onPlay = { key, fromStart -> rootNav.navigate("plex_play/$key?fromStart=$fromStart") },
+                )
+            }
+        }
         composable(PLEX_PROFILES_ROUTE) {
             PlexProfilesScreen(container.plexSession, onDone = { rootNav.popBackStack() })
         }
@@ -238,6 +275,7 @@ private fun MainScaffold(
     onPlay: PlayHandler,
     onPlexSignIn: () -> Unit,
     onPlexProfiles: () -> Unit,
+    onOpenVault: (String) -> Unit,
     onPlayPlex: com.logan.shieldmedia.plex.ui.PlexPlayHandler,
     onPlayVod: VodPlayHandler,
     onPlayLive: LivePlayHandler,
@@ -306,7 +344,11 @@ private fun MainScaffold(
                             isPremiumLibrary(s.title) -> icons.Disc
                             else -> icons.Movies
                         },
-                        target = "library/${s.key}?title=${Uri.encode(s.title)}",
+                        target = if (s.type == "movie" && isPremiumLibrary(s.title)) {
+                            "vault/${s.key}?title=${Uri.encode(s.title)}"
+                        } else {
+                            "library/${s.key}?title=${Uri.encode(s.title)}"
+                        },
                     )
                 }
         }.getOrDefault(emptyList())
@@ -347,6 +389,10 @@ private fun MainScaffold(
                     onSelect = { dest ->
                         // Let the new screen take focus as soon as its content is ready.
                         drawerEnteredByUser = false
+                        if (dest.target.startsWith("vault/")) {
+                            onOpenVault(dest.target)
+                            return@SideMenu
+                        }
                         if (currentRoute != dest.id) {
                             navController.navigate(dest.target) {
                                 popUpTo(Destination.Home.route)
