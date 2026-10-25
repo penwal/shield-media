@@ -1,0 +1,30 @@
+[
+ {
+  "id": "3stooges",
+  "title": "The Three Stooges",
+  "year": "",
+  "image": "https://archive.org/services/img/3stooges",
+  "episodes": [
+   {
+    "title": "NewApants2",
+    "file": "https://archive.org/download/3stooges/3stooges_NewApants2.mp4",
+    "secs": 1014
+   },
+   {
+    "title": "NewDisorder2",
+    "file": "https://archive.org/download/3stooges/3stooges_NewDisorder2.mp4",
+    "secs": 994
+   },
+   {
+    "title": "NewGroom",
+    "file": "https://archive.org/download/3stooges/3stooges_NewGroom.mp4",
+    "secs": 996
+   },
+   {
+    "title": "NewMalice1",
+    "file": "https://archive.org/download/3stooges/3stooges_NewMalice1.mp4",
+    "secs": 939
+   }
+  ]
+ }
+]

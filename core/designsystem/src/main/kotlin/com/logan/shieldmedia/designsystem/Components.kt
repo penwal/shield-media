@@ -238,6 +238,8 @@ fun PivotScroll(pivot: Dp, onlyWhenHidden: Boolean = false, content: @Composable
 fun ContentRow(
     title: String,
     modifier: Modifier = Modifier,
+    /** Left/right margin; 0 when the row sits inside something already padded. */
+    inset: Dp = Spacing.ScreenH,
     content: LazyListScope.() -> Unit,
 ) {
     Column(modifier) {
@@ -245,12 +247,12 @@ fun ContentRow(
             text = title,
             style = MaterialTheme.typography.titleLarge,
             color = ShieldColors.OnSurface,
-            modifier = Modifier.padding(start = Spacing.ScreenH, bottom = 4.dp),
+            modifier = Modifier.padding(start = inset, bottom = 4.dp),
         )
-        PivotScroll(pivot = Spacing.ScreenH) {
+        PivotScroll(pivot = inset) {
             LazyRow(
                 // Vertical padding leaves room for the focused card's scale and glow.
-                contentPadding = PaddingValues(horizontal = Spacing.ScreenH, vertical = 14.dp),
+                contentPadding = PaddingValues(horizontal = inset, vertical = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.CardGap),
                 content = content,
             )

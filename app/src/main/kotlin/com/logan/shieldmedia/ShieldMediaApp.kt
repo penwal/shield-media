@@ -10,6 +10,7 @@ import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import com.logan.shieldmedia.iptv.IptvRepository
+import com.logan.shieldmedia.iptv.IptvVodRepository
 import com.logan.shieldmedia.plex.PlexLibrary
 import com.logan.shieldmedia.plex.PlexSession
 import com.logan.shieldmedia.settings.SettingsRepository
@@ -30,6 +31,7 @@ class AppContainer(app: Application) {
     val plexSession = PlexSession(app, okHttp)
     val plexLibrary = PlexLibrary(plexSession)
     val iptv = IptvRepository(app, okHttp)
+    val iptvVod = IptvVodRepository(app, iptv)
 }
 
 class ShieldMediaApp : Application(), SingletonImageLoader.Factory {

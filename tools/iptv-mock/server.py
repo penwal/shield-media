@@ -50,6 +50,16 @@ for i, line in enumerate(lines):
         "url": url,
     })
 groups = sorted({c["group"] for c in channels})
+
+# VOD: public-domain films and one series from the Internet Archive (vod.json / series.json).
+def _load(name):
+    path = HERE / name
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+movies = [m for m in _load("vod.json") if m["id"] != "3stooges"]
+series = _load("series.json")
+MOVIE_CATS = ["Classics", "Comedy", "Thriller"]
+def movie_cat(i): return str(100 + i % len(MOVIE_CATS))
+
 print(f"{len(channels)} channels in {len(groups)} groups with guide data", flush=True)
 
 
@@ -98,9 +108,50 @@ class Handler(BaseHTTPRequestHandler):
                          "epg_channel_id": c["pluto"], "category_id": str(groups.index(c["group"]) + 1),
                          "tv_archive": 0, "tv_archive_duration": 0}
                         for n, c in enumerate(channels, 1)]
+            elif action == "get_vod_categories":
+                body = [{"category_id": str(100 + i), "category_name": n, "parent_id": 0} for i, n in enumerate(MOVIE_CATS)]
+            elif action == "get_vod_streams":
+                body = [{"num": i + 1, "name": m["title"], "stream_type": "movie", "stream_id": 5000 + i,
+                         "stream_icon": m["image"], "rating": "7.1", "added": "1700000000",
+                         "category_id": movie_cat(i), "container_extension": "mp4"}
+                        for i, m in enumerate(movies) if q.get("category_id") in (None, movie_cat(i))]
+            elif action == "get_vod_info":
+                i = int(q.get("vod_id", "0")) - 5000
+                m = movies[i]
+                body = {"info": {"name": m["title"], "movie_image": m["image"], "backdrop_path": [m["image"]],
+                                 "plot": m["plot"], "releasedate": m["year"] + "-01-01", "duration_secs": m["secs"],
+                                 "genre": MOVIE_CATS[i % len(MOVIE_CATS)], "rating": "7.1", "cast": "", "director": ""},
+                        "movie_data": {"stream_id": 5000 + i, "name": m["title"], "container_extension": "mp4"}}
+            elif action == "get_series_categories":
+                body = [{"category_id": "200", "category_name": "Classic TV", "parent_id": 0}]
+            elif action == "get_series":
+                body = [{"num": i + 1, "name": sr["title"], "series_id": 7000 + i, "cover": sr["image"],
+                         "plot": "Slapstick shorts.", "releaseDate": sr["year"] or "1935", "rating": "8",
+                         "backdrop_path": [sr["image"]], "category_id": "200"} for i, sr in enumerate(series)]
+            elif action == "get_series_info":
+                sr = series[int(q.get("series_id", "0")) - 7000]
+                eps = {}
+                for n, e in enumerate(sr["episodes"]):
+                    season = 1 + n // 2
+                    eps.setdefault(str(season), []).append({
+                        "id": str(8000 + n), "episode_num": n % 2 + 1, "title": e["title"], "season": season,
+                        "container_extension": "mp4",
+                        "info": {"movie_image": sr["image"], "plot": "", "duration_secs": e["secs"]}})
+                body = {"info": {"name": sr["title"], "cover": sr["image"], "plot": "Slapstick shorts.",
+                                 "backdrop_path": [sr["image"]], "releaseDate": sr["year"], "rating": "8"},
+                        "seasons": [{"season_number": int(k), "name": f"Season {k}"} for k in eps],
+                        "episodes": eps}
             else:
                 body = []
             return self.send(200, json.dumps(body).encode())
+        mv = re.match(rf"/movie/{USER}/{PASS}/(\d+)\.\w+$", u.path)
+        if mv:
+            return self.send(302, headers={"Location": movies[int(mv.group(1)) - 5000]["file"]})
+        ep = re.match(rf"/series/{USER}/{PASS}/(\d+)\.\w+$", u.path)
+        if ep:
+            n = int(ep.group(1)) - 8000
+            all_eps = [e for sr in series for e in sr["episodes"]]
+            return self.send(302, headers={"Location": all_eps[n]["file"]})
         m = re.match(rf"/live/{USER}/{PASS}/(\d+)\.\w+$", u.path)
         if m and 1 <= int(m.group(1)) <= len(channels):
             return self.send(302, headers={"Location": channels[int(m.group(1)) - 1]["url"]})

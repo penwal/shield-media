@@ -39,6 +39,8 @@ import com.logan.shieldmedia.iptv.ChannelFilter
 import com.logan.shieldmedia.iptv.DEFAULT_USER_AGENT
 import com.logan.shieldmedia.iptv.IptvRepository
 import com.logan.shieldmedia.iptv.ui.LivePlayerScreen
+import com.logan.shieldmedia.iptv.ui.IptvVodPlayerRoute
+import com.logan.shieldmedia.iptv.ui.VodPlayRequest
 import com.logan.shieldmedia.player.PlayerScreen
 import com.logan.shieldmedia.settings.SettingsRepository
 import kotlinx.coroutines.flow.first
@@ -62,6 +64,21 @@ fun PlexPlayRoute(container: AppContainer, ratingKey: String, fromStart: Boolean
     } else {
         val env = remember(server) { PlexEnv(container.plexLibrary, server) }
         PlexPlayerRoute(env, ratingKey, fromStart, loaded, onExit)
+    }
+}
+
+/** IPTV movies and series, with resume and next-episode. */
+@Composable
+fun VodPlayRoute(container: AppContainer, request: VodPlayRequest, onExit: () -> Unit) {
+    val config by produceState<PlaybackConfig?>(initialValue = null) {
+        val s = container.settings.playerSettings.first()
+        value = PlaybackConfig(autoFrameRate = s.autoFrameRate, audioPassthrough = s.audioPassthrough, showStats = s.showStatsOverlay)
+    }
+    val loaded = config
+    if (loaded == null) {
+        Box(Modifier.fillMaxSize().background(Color.Black))
+    } else {
+        IptvVodPlayerRoute(container.iptvVod, request, loaded, onExit)
     }
 }
 

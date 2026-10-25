@@ -55,7 +55,7 @@ internal class IptvHttp(client: OkHttpClient) {
  */
 class IptvRepository(context: Context, okHttp: OkHttpClient) {
     private val store = IptvStore(context)
-    private val http = IptvHttp(okHttp)
+    internal val http = IptvHttp(okHttp)
     private val prefs = context.applicationContext.getSharedPreferences("iptv", Context.MODE_PRIVATE)
     private val syncLock = Mutex()
 
