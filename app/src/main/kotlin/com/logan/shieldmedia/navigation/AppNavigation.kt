@@ -343,12 +343,31 @@ private fun MainScaffold(
                         // Entering the menu always lands on the current section, not the nearest item.
                         .focusProperties { onEnter = { drawerFocus.requestFocus() } }
                         .focusGroup(),
+                    // Choosing a section closes the menu and drops you into it.
                     onSelect = { dest ->
+                        // Let the new screen take focus as soon as its content is ready.
+                        drawerEnteredByUser = false
                         if (currentRoute != dest.id) {
-                            navigatedFromDrawer = true
                             navController.navigate(dest.target) {
                                 popUpTo(Destination.Home.route)
                                 launchSingleTop = true
+                            }
+                        }
+                        // Hand focus to the screen (closing the menu). The outgoing screen is still
+                        // fading out and can briefly hold focus, so keep at it until focus has stayed
+                        // in the content for a moment — unless the viewer starts pressing keys.
+                        val selectedAt = SystemClock.uptimeMillis()
+                        scope.launch {
+                            var stable = 0
+                            repeat(40) {
+                                delay(100)
+                                if (lastKeyAt > selectedAt + 50) return@launch
+                                if (contentHasFocus) {
+                                    if (++stable >= 5) return@launch
+                                } else {
+                                    stable = 0
+                                    runCatching { contentFocus.requestFocus() }
+                                }
                             }
                         }
                     },
