@@ -142,7 +142,7 @@ settings/                 settings screens for both sides
 | # | Milestone | Done when |
 |---|---|---|
 | 0 | **Environment** | Android Studio + SDK installed, Shield connected via network ADB, Android TV emulator working, git repo initialized |
-| 1 | **Skeleton + design system** | Multi-module project builds; app installs on Shield; nav rail, theme, focusable cards/rows, settings storage |
+| 1 | **Skeleton + design system** ✅ | Multi-module project builds; app installs on Shield; nav rail, theme, focusable cards/rows, settings storage. *Done on the emulator; modules `app` + `core:designsystem`. Hilt/Room/Retrofit are deferred until first needed (milestones 3 and 5).* |
 | 2 | **Player core** | Plays local/URL test matrix with HW decode, passthrough, AFR, track selection, stats overlay |
 | 3 | **Plex: auth + browse** | PIN login, server discovery, home hubs, libraries, details pages, search |
 | 4 | **Plex: playback integration** | Direct play, resume, timeline/scrobble, skip intro/credits, next episode, transcode fallback |
