@@ -357,32 +357,44 @@ private fun MainScaffold(
         }
     }
     val scope = rememberCoroutineScope()
-    // Plex libraries for the menu: movie and show libraries, in the server's order.
-    val libraries by androidx.compose.runtime.produceState(emptyList<MenuEntry>(), plexState) {
-        val server = (plexState as? com.logan.shieldmedia.plex.PlexState.Ready)?.server
-        value = if (server == null) emptyList() else runCatching {
-            // Order: regular movie libraries, then premium ones (Blu-Ray/4K), then TV.
-            container.plexLibrary.sections(server)
-                .filter { it.type == "movie" || it.type == "show" }
-                .sortedBy { s -> if (s.type == "show") 2 else if (isPremiumLibrary(s.title)) 1 else 0 }
-                .map { s ->
-                    val icons = com.logan.shieldmedia.designsystem.ShieldIcons
-                    MenuEntry(
-                        id = "library/${s.key}",
-                        label = s.title,
-                        icon = when {
-                            s.type == "show" -> icons.Shows
-                            isPremiumLibrary(s.title) -> icons.Disc
-                            else -> icons.Movies
-                        },
-                        target = if (s.type == "movie" && isPremiumLibrary(s.title)) {
-                            "vault/${s.key}?title=${Uri.encode(s.title)}"
-                        } else {
-                            "library/${s.key}?title=${Uri.encode(s.title)}"
-                        },
-                    )
-                }
-        }.getOrDefault(emptyList())
+    // Plex libraries for the menu. The last good list is kept while the session reconnects or a
+    // request fails, so the menu never collapses to just Home and Live TV; it only clears on sign-out.
+    var libraries by remember { mutableStateOf(emptyList<MenuEntry>()) }
+    LaunchedEffect(plexState) {
+        if (plexState is com.logan.shieldmedia.plex.PlexState.SignedOut) libraries = emptyList()
+        val server = (plexState as? com.logan.shieldmedia.plex.PlexState.Ready)?.server ?: return@LaunchedEffect
+        var attempt = 0
+        while (true) {
+            val fetched = runCatching {
+                // Order: regular movie libraries, then premium ones (Blu-Ray/4K), then TV.
+                container.plexLibrary.sections(server)
+                    .filter { it.type == "movie" || it.type == "show" }
+                    .sortedBy { s -> if (s.type == "show") 2 else if (isPremiumLibrary(s.title)) 1 else 0 }
+                    .map { s ->
+                        val icons = com.logan.shieldmedia.designsystem.ShieldIcons
+                        MenuEntry(
+                            id = "library/${s.key}",
+                            label = s.title,
+                            icon = when {
+                                s.type == "show" -> icons.Shows
+                                isPremiumLibrary(s.title) -> icons.Disc
+                                else -> icons.Movies
+                            },
+                            target = if (s.type == "movie" && isPremiumLibrary(s.title)) {
+                                "vault/${s.key}?title=${Uri.encode(s.title)}"
+                            } else {
+                                "library/${s.key}?title=${Uri.encode(s.title)}"
+                            },
+                        )
+                    }
+            }.getOrNull()
+            if (fetched != null) {
+                libraries = fetched
+                break
+            }
+            delay(2_000L shl attempt.coerceAtMost(4))
+            attempt++
+        }
     }
 
     val openItem: (PlexItem) -> Unit = { navController.navigate("plex/item/${it.ratingKey}") }

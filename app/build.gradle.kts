@@ -16,7 +16,11 @@ android {
     }
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Optimized (R8) build for the Shield. Signed with the debug key so it installs over
+            // the debug build without losing app data (it's a personal sideloaded app).
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {

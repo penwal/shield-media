@@ -73,7 +73,11 @@ class PlexSession(context: Context, okHttp: OkHttpClient) {
             return
         }
         val saved = prefs.savedServer()
-        if (saved != null && http.ping("${saved.baseUrl}/identity".toHttpUrl(), clientInfo, saved.token, probeClient)) {
+        // A saved internet address is re-checked against the server's list, so a LAN address
+        // (e.g. a custom server URL added later) takes over: remuxes need the full LAN speed.
+        if (saved != null && isLanAddress(saved.baseUrl) &&
+            http.ping("${saved.baseUrl}/identity".toHttpUrl(), clientInfo, saved.token, probeClient)
+        ) {
             _state.value = PlexState.Ready(saved)
             return
         }
@@ -197,11 +201,12 @@ class PlexSession(context: Context, okHttp: OkHttpClient) {
     /**
      * Tries every advertised address at once and takes the best one that answers:
      * local first (fastest, no bandwidth limits), then remote, and the Plex relay last.
+     * "Local" also covers LAN addresses Plex doesn't flag as local, like custom server URLs.
      */
     private suspend fun bestConnection(resource: PlexResource, token: String): String? = coroutineScope {
         val ordered = resource.connections.sortedBy {
             when {
-                it.local && !it.relay -> 0
+                (it.local || isLanAddress(it.uri)) && !it.relay -> 0
                 !it.relay -> 1
                 else -> 2
             }
@@ -223,6 +228,17 @@ class PlexSession(context: Context, okHttp: OkHttpClient) {
             prefs.remove(Keys.ServerOwned)
         }
         _state.value = PlexState.SignedOut
+    }
+
+    /** A private-network address, written plainly or as a plex.direct name (192-168-1-5.<hash>.plex.direct). */
+    private fun isLanAddress(uri: String): Boolean {
+        val host = runCatching { uri.toHttpUrl().host }.getOrNull() ?: return false
+        val ip = if (host.endsWith(".plex.direct")) host.substringBefore('.').replace('-', '.') else host
+        val parts = ip.split('.').mapNotNull { it.toIntOrNull() }
+        if (parts.size != 4) return false
+        return parts[0] == 10 ||
+            (parts[0] == 192 && parts[1] == 168) ||
+            (parts[0] == 172 && parts[1] in 16..31)
     }
 
     private fun Preferences.savedServer(): ActiveServer? {
