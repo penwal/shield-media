@@ -53,6 +53,7 @@ fun LiveRoute(
             audioPassthrough = s.audioPassthrough,
             showStats = s.showStatsOverlay,
             userAgent = repo.userAgent(playlistId) ?: DEFAULT_USER_AGENT,
+            liveBufferMs = s.liveBuffer.millis,
         )
     }
     val loaded = config

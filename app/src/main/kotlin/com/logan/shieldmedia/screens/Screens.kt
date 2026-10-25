@@ -24,6 +24,7 @@ import com.logan.shieldmedia.designsystem.ShieldColors
 import com.logan.shieldmedia.designsystem.Spacing
 import com.logan.shieldmedia.plex.PlexSession
 import com.logan.shieldmedia.plex.PlexState
+import com.logan.shieldmedia.settings.LiveBuffer
 import com.logan.shieldmedia.settings.PlayerSettings
 import com.logan.shieldmedia.settings.SettingsRepository
 import kotlinx.coroutines.launch
@@ -101,6 +102,18 @@ fun SettingsScreen(
                     onClick = onOpenIptvSources,
                     headlineContent = { Text("Live TV sources") },
                     supportingContent = { Text("Xtream Codes accounts and M3U playlists") },
+                )
+            }
+            item {
+                // Cycles Fast -> Balanced -> Stable.
+                ListItem(
+                    selected = false,
+                    onClick = {
+                        val next = LiveBuffer.entries[(settings.liveBuffer.ordinal + 1) % LiveBuffer.entries.size]
+                        scope.launch { repository.setLiveBuffer(next) }
+                    },
+                    headlineContent = { Text("Live TV buffer: ${settings.liveBuffer.label}") },
+                    supportingContent = { Text(settings.liveBuffer.detail) },
                 )
             }
 
