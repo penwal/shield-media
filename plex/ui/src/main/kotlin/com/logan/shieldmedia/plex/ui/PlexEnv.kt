@@ -25,11 +25,23 @@ class PlexEnv(val library: PlexLibrary, val server: ActiveServer) {
     fun logo(item: PlexItem): String? = library.imageUrl(server, item.clearLogo, 900, 360)
     fun person(path: String?): String? = library.imageUrl(server, path, 200, 200)
 
-    /** Direct-play URL of the title's main trailer, or null if it has none. */
+    /**
+     * The sharpest trailer available: every trailer comes in several versions (1080p, 720p,
+     * 480p...), so take the highest-resolution, highest-bitrate one, preferring the main trailer.
+     */
     suspend fun trailerUrl(ratingKey: String): String? {
-        val trailer = library.extras(server, ratingKey).firstOrNull { it.subtype == "trailer" } ?: return null
-        val part = trailer.media.firstOrNull()?.parts?.firstOrNull() ?: return null
-        return library.directPlayUrl(server, part)
+        val trailers = library.extras(server, ratingKey).filter { it.subtype == "trailer" }
+        val best = trailers.withIndex()
+            .flatMap { (i, t) -> t.media.map { m -> Triple(i, m, m.parts.firstOrNull()) } }
+            .filter { it.third != null }
+            .maxWithOrNull(
+                compareBy<Triple<Int, com.logan.shieldmedia.plex.PlexMedia, com.logan.shieldmedia.plex.PlexPart?>>(
+                    { it.second.width ?: 0 },
+                    { -it.first }, // same resolution: the earlier (main) trailer wins
+                    { it.second.bitrate ?: 0 },
+                ),
+            ) ?: return null
+        return library.directPlayUrl(server, best.third!!)
     }
 
     fun play(item: PlexItem, fromStart: Boolean, onPlay: PlexPlayHandler): Boolean {

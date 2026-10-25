@@ -30,7 +30,7 @@ import com.logan.shieldmedia.plex.PlexItem
 import kotlinx.coroutines.delay
 
 private const val SETTLE_MS = 1_200L
-private const val BAR_ZOOM = 1.28f
+private const val BAR_ZOOM = 1.25f
 
 /**
  * Plays the focused title's trailer silently behind the showcase, filling the screen (cropped,
@@ -94,8 +94,10 @@ fun TrailerBackdrop(env: PlexEnv, item: PlexItem?, modifier: Modifier = Modifier
         val screen = maxWidth / maxHeight
         // Fill: crop the video to cover the screen.
         val size = if (aspect > screen) Modifier.requiredSize(maxHeight * aspect, maxHeight) else Modifier.requiredSize(maxWidth, maxWidth / aspect)
-        // Trailers for scope films often have black bars baked into a 16:9 frame; zoom past them.
-        Box(size.graphicsLayer { scaleX = BAR_ZOOM; scaleY = BAR_ZOOM }) {
+        // A 16:9 frame from a widescreen film usually has black bars baked in; zoom past those.
+        // Already-wide videos are cropped to fill, so they get no extra zoom (keeps them sharp).
+        val zoom = if (aspect < 1.9f) BAR_ZOOM else 1f
+        Box(size.graphicsLayer { scaleX = zoom; scaleY = zoom }) {
             AndroidView(
                 factory = { ctx -> TextureView(ctx).also { player.setVideoTextureView(it) } },
                 modifier = Modifier.fillMaxSize(),
