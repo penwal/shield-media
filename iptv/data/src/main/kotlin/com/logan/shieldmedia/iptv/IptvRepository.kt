@@ -20,6 +20,7 @@ private const val EPG_DAYS_BACK = 1L
 private const val EPG_DAYS_AHEAD = 7L
 private const val DAY_MS = 24 * 60 * 60_000L
 const val DEFAULT_USER_AGENT = "ShieldMedia/0.1 (Android TV)"
+private val XTREAM_LIVE_URL = Regex("""^(.*)/live/([^/]+)/([^/]+)/(\d+)\.\w+$""")
 
 internal class IptvHttp(client: OkHttpClient) {
     // Panels and big guide files can be slow; give them room.
@@ -156,6 +157,7 @@ class IptvRepository(context: Context, okHttp: OkHttpClient) {
         PlaylistType.XTREAM -> {
             val client = XtreamClient(http, playlist)
             val ext = client.authenticate()
+            client.timezone?.let { prefs.edit().putString("tz_${playlist.id}", it).apply() }
             client.liveChannels(ext) to client.epgUrl()
         }
         PlaylistType.M3U -> {
@@ -230,6 +232,23 @@ class IptvRepository(context: Context, okHttp: OkHttpClient) {
     suspend fun setFavorite(channel: Channel, favorite: Boolean) = withContext(Dispatchers.IO) {
         store.setFavorite(channel.playlistId, channel.key, favorite)
         _dataVersion.value++
+    }
+
+    /**
+     * Archive URL for a past programme on a catch-up channel (Xtream "timeshift"), or null when
+     * the channel has no archive or the programme is older than the provider keeps.
+     */
+    fun catchupUrl(channel: Channel, program: Program, now: Long = System.currentTimeMillis()): String? {
+        if (channel.catchupDays <= 0 || program.stop > now) return null
+        if (program.start < now - channel.catchupDays * DAY_MS) return null
+        val m = XTREAM_LIVE_URL.matchEntire(channel.streamUrl) ?: return null
+        val (base, user, pass, id) = m.destructured
+        val zone = runCatching { java.time.ZoneId.of(prefs.getString("tz_${channel.playlistId}", "UTC")) }
+            .getOrDefault(java.time.ZoneOffset.UTC)
+        val start = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd:HH-mm")
+            .format(java.time.Instant.ofEpochMilli(program.start).atZone(zone))
+        val minutes = ((program.stop - program.start + 59_999) / 60_000).coerceAtLeast(1)
+        return "$base/timeshift/$user/$pass/$minutes/$start/$id.ts"
     }
 
     fun userAgent(playlistId: Long): String? = _playlists.value.firstOrNull { it.id == playlistId }?.userAgent

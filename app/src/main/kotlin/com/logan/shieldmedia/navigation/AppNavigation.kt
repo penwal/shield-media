@@ -323,7 +323,12 @@ private fun MainScaffold(
                         plex { env -> PlexLibraryScreen(env, sectionType = "show", title = "TV Shows", onOpen = openItem) }
                     }
                     composable(Destination.LiveTv.route) {
-                        LiveGuideScreen(container.iptv, onPlay = onPlayLive, onAddSource = { navController.navigate(IPTV_ADD_ROUTE) })
+                        LiveGuideScreen(
+                            container.iptv,
+                            onPlay = onPlayLive,
+                            onAddSource = { navController.navigate(IPTV_ADD_ROUTE) },
+                            onPlayArchive = { uri, title -> onPlay(uri, title, 0L) },
+                        )
                     }
                     composable(IPTV_SOURCES_ROUTE) {
                         IptvSourcesScreen(container.iptv, onAdd = { navController.navigate(IPTV_ADD_ROUTE) })

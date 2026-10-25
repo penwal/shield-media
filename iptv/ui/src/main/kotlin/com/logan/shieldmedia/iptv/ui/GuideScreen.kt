@@ -60,6 +60,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.logan.shieldmedia.designsystem.MessageState
+import com.logan.shieldmedia.designsystem.Motion
 import com.logan.shieldmedia.designsystem.PrimaryButton
 import com.logan.shieldmedia.designsystem.ShieldColors
 import com.logan.shieldmedia.designsystem.ShieldIcon
@@ -81,8 +82,16 @@ private val ChannelColumn = 210.dp
 /** Plays [channel] with the guide's current filter as the zapping list. */
 typealias LivePlayHandler = (channel: Channel, filter: ChannelFilter) -> Unit
 
+/** Plays a recorded programme (catch-up): stream URL and title. */
+typealias ArchivePlayHandler = (uri: String, title: String) -> Unit
+
 @Composable
-fun LiveGuideScreen(repo: IptvRepository, onPlay: LivePlayHandler, onAddSource: () -> Unit) {
+fun LiveGuideScreen(
+    repo: IptvRepository,
+    onPlay: LivePlayHandler,
+    onAddSource: () -> Unit,
+    onPlayArchive: ArchivePlayHandler = { _, _ -> },
+) {
     val vm = viewModel(key = "guide") { GuideViewModel(repo) }
     val channels = vm.channels
 
@@ -98,13 +107,13 @@ fun LiveGuideScreen(repo: IptvRepository, onPlay: LivePlayHandler, onAddSource: 
             if (vm.filter == ChannelFilter.Favorites) "Long-press OK on a channel in the guide to add it here." else "This source has no channels in \"${vm.filter.label}\".",
             action = { PrimaryButton("Show all channels", onClick = { vm.selectFilter(ChannelFilter.All) }) },
         )
-        else -> Guide(vm, channels, onPlay)
+        else -> Guide(vm, channels, onPlay, onPlayArchive)
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun Guide(vm: GuideViewModel, channels: List<Channel>, onPlay: LivePlayHandler) {
+private fun Guide(vm: GuideViewModel, channels: List<Channel>, onPlay: LivePlayHandler, onPlayArchive: ArchivePlayHandler) {
     val gridFocus = remember { FocusRequester() }
     val chipFocus = remember { FocusRequester() }
     var gridFocused by remember { mutableStateOf(false) }
@@ -165,7 +174,18 @@ private fun Guide(vm: GuideViewModel, channels: List<Channel>, onPlay: LivePlayH
                                 longPressHandled = true
                             }
                             if (event.type == KeyEventType.KeyUp) {
-                                if (!longPressHandled) vm.focusedChannel()?.let { onPlay(it, vm.filter) }
+                                if (!longPressHandled) {
+                                    // A past programme on a catch-up channel plays from its start;
+                                    // anything else tunes the channel live.
+                                    val archive = vm.focusedCatchupUrl()
+                                    val ch = vm.focusedChannel()
+                                    val program = vm.focusedProgram()
+                                    if (archive != null && ch != null && program != null) {
+                                        onPlayArchive(archive, "${ch.name}  ·  ${program.title}")
+                                    } else {
+                                        ch?.let { onPlay(it, vm.filter) }
+                                    }
+                                }
                                 longPressHandled = false
                             }
                             return@onPreviewKeyEvent true
@@ -230,7 +250,9 @@ private fun Guide(vm: GuideViewModel, channels: List<Channel>, onPlay: LivePlayH
         }
         LaunchedEffect(groupPanel) {
             if (!groupPanel) {
-                withFrameNanos { }
+                // Wait out the panel's exit animation; while it is still composed it holds focus,
+                // and a request made earlier is lost when it leaves (focus would drop to the menu).
+                delay(Motion.EXIT_MS + 120L)
                 runCatching { gridFocus.requestFocus() }
             }
         }
@@ -259,6 +281,14 @@ private fun GuideHeader(vm: GuideViewModel, now: Long) {
             if (program != null) {
                 val live = program.isAiring(now)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (!live && channel != null && vm.hasCatchup(channel, program, now)) {
+                        Text(
+                            "CATCH-UP",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ShieldColors.Background,
+                            modifier = Modifier.background(ShieldColors.OnSurface, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
+                        )
+                    }
                     if (live) {
                         Text(
                             "LIVE",
@@ -374,6 +404,7 @@ private fun GuideRow(vm: GuideViewModel, channel: Channel, rowFocused: Boolean, 
                     program = program,
                     focused = program == focusedProgram,
                     live = program.isAiring(now),
+                    catchup = vm.hasCatchup(channel, program, now),
                     modifier = Modifier.offset(x = x).width(w).fillMaxHeight().padding(vertical = 3.dp),
                 )
             }
@@ -382,19 +413,28 @@ private fun GuideRow(vm: GuideViewModel, channel: Channel, rowFocused: Boolean, 
 }
 
 @Composable
-private fun ProgramCell(program: Program, focused: Boolean, live: Boolean, modifier: Modifier) {
+private fun ProgramCell(program: Program, focused: Boolean, live: Boolean, catchup: Boolean, modifier: Modifier) {
     val background = when {
         focused -> ShieldColors.OnSurface
         live -> ShieldColors.SurfaceBright
         else -> ShieldColors.SurfaceHigh
     }
-    Column(
+    Row(
         modifier
             .background(background, RoundedCornerShape(8.dp))
             .then(if (live && !focused) Modifier.border(1.dp, ShieldColors.Hairline, RoundedCornerShape(8.dp)) else Modifier)
             .padding(horizontal = 12.dp),
-        verticalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (catchup) {
+            ShieldIcon(
+                ShieldIcons.Back10,
+                contentDescription = "Catch-up available",
+                size = 14.dp,
+                tint = if (focused) ShieldColors.Background else ShieldColors.OnSurfaceMuted,
+            )
+        }
         Text(
             program.title.ifEmpty { "No information" },
             style = MaterialTheme.typography.titleSmall,

@@ -21,6 +21,7 @@ internal const val WINDOW_MS = 4 * SLOT_MS // two hours on screen
 private const val CACHE_BEFORE_MS = 6 * 60 * 60_000L
 private const val CACHE_AFTER_MS = 24 * 60 * 60_000L
 private const val PAST_LIMIT_MS = 2 * 60 * 60_000L
+private const val DAY_MS = 24 * 60 * 60_000L
 
 internal fun snapToSlot(t: Long) = t - t % SLOT_MS
 
@@ -37,6 +38,8 @@ class GuideViewModel(private val repo: IptvRepository) : ViewModel() {
         private set
     var channels by mutableStateOf<List<Channel>?>(null)
         private set
+    /** How far back the guide scrolls: 2 h normally, up to a day when channels have catch-up. */
+    private var pastLimitMs = PAST_LIMIT_MS
 
     var focusedRow by mutableIntStateOf(0)
         private set
@@ -72,6 +75,7 @@ class GuideViewModel(private val repo: IptvRepository) : ViewModel() {
         if (changedPlaylist) filter = ChannelFilter.All
         val list = repo.channels(id, filter)
         channels = list
+        pastLimitMs = maxOf(PAST_LIMIT_MS, (list.maxOfOrNull { it.catchupDays } ?: 0).coerceAtMost(1) * DAY_MS)
         focusedRow = focusedRow.coerceIn(0, (list.size - 1).coerceAtLeast(0))
         programs.clear()
         requested.clear()
@@ -135,7 +139,7 @@ class GuideViewModel(private val repo: IptvRepository) : ViewModel() {
         } else {
             (current?.start ?: snapToSlot(focusedTime)) - 1
         }
-        val earliest = snapToSlot(now) - PAST_LIMIT_MS
+        val earliest = snapToSlot(now) - pastLimitMs
         if (target < earliest) return
         focusedTime = target
         // Keep the focused programme on screen, scrolling the timeline in half-hour steps.
@@ -148,6 +152,17 @@ class GuideViewModel(private val repo: IptvRepository) : ViewModel() {
         focusedTime = now
         windowStart = snapToSlot(now)
     }
+
+    /** Archive URL for the focused programme if it can be watched from the start (catch-up). */
+    fun focusedCatchupUrl(): String? {
+        val ch = focusedChannel() ?: return null
+        val p = focusedProgram()?.takeIf { it.title.isNotEmpty() } ?: return null
+        return repo.catchupUrl(ch, p)
+    }
+
+    fun hasCatchup(channel: Channel, program: Program, now: Long): Boolean =
+        channel.catchupDays > 0 && program.title.isNotEmpty() && program.stop <= now &&
+            program.start >= now - channel.catchupDays * DAY_MS
 
     fun toggleFavorite(channel: Channel) {
         viewModelScope.launch { repo.setFavorite(channel, !channel.favorite) }

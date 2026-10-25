@@ -23,6 +23,10 @@ internal class XtreamClient(private val http: IptvHttp, private val playlist: Pl
     private val user = playlist.username.orEmpty()
     private val pass = playlist.password.orEmpty()
 
+    /** Server timezone from the login response; catch-up start times are in this zone. */
+    var timezone: String? = null
+        private set
+
     private fun api(action: String? = null): HttpUrl =
         "$base/player_api.php".toHttpUrl().newBuilder()
             .addQueryParameter("username", user)
@@ -37,6 +41,7 @@ internal class XtreamClient(private val http: IptvHttp, private val playlist: Pl
         if (userInfo.str("auth") != "1") throw IptvException("Wrong username or password.")
         val status = userInfo.str("status")
         if (status != null && !status.equals("Active", ignoreCase = true)) throw IptvException("Account status: $status")
+        timezone = (info["server_info"] as? JsonObject)?.str("timezone")
         val formats = (userInfo["allowed_output_formats"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()
         return if (formats.isEmpty() || "ts" in formats) "ts" else formats.first()
     }
