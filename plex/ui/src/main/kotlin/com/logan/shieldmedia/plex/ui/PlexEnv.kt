@@ -18,6 +18,8 @@ sealed interface Loadable<out T> {
 class PlexEnv(val library: PlexLibrary, val server: ActiveServer) {
 
     fun poster(item: PlexItem): String? = library.imageUrl(server, item.posterPath(), 300, 450)
+    /** Big single posters (the Blu-Ray deck): sharp at 4K output. */
+    fun posterLarge(item: PlexItem): String? = library.imageUrl(server, item.posterPath(), 800, 1200)
     fun landscape(item: PlexItem): String? = library.imageUrl(server, item.landscapePath(), 520, 293)
     fun backdrop(item: PlexItem?): String? = item?.let { library.imageUrl(server, it.artPath(), 1920, 1080) }
     fun logo(item: PlexItem): String? = library.imageUrl(server, item.clearLogo, 900, 360)

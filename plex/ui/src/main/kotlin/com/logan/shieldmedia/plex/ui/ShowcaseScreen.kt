@@ -104,6 +104,8 @@ class PlexShowcaseViewModel(private val env: PlexEnv, private val sectionKey: St
     val details = mutableStateMapOf<String, PlexItem>()
     /** The stage takes all remote input; anyone (e.g. a dialog closing) can hand focus back. */
     val stageFocus = FocusRequester()
+    /** Set by the screen; loads an image into Coil's cache ahead of time. */
+    var prefetchImage: ((String) -> Unit)? = null
 
     init {
         viewModelScope.launch {
@@ -129,6 +131,8 @@ class PlexShowcaseViewModel(private val env: PlexEnv, private val sectionKey: St
     private fun prefetchAround(i: Int) {
         val list = items ?: return
         (i - 1..i + 2).mapNotNull { list.getOrNull(it) }.forEach(::loadDetails)
+        // Warm the image cache for the next poster so flipping shows it sharp immediately.
+        list.getOrNull(i + 1)?.let { next -> env.posterLarge(next)?.let { prefetchImage?.invoke(it) } }
     }
 
     private fun loadDetails(item: PlexItem) {
@@ -146,6 +150,8 @@ class PlexShowcaseViewModel(private val env: PlexEnv, private val sectionKey: St
 @Composable
 fun PlexShowcaseScreen(env: PlexEnv, sectionKey: String, title: String, onOpen: (PlexItem) -> Unit) {
     val vm = viewModel(key = "showcase-$sectionKey-${env.server.id}") { PlexShowcaseViewModel(env, sectionKey) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    vm.prefetchImage = { url -> coil3.SingletonImageLoader.get(context).enqueue(coil3.request.ImageRequest.Builder(context).data(url).build()) }
     val items = vm.items
     val current = items?.getOrNull(vm.index)
     val detail = current?.let { vm.details[it.ratingKey] } ?: current
@@ -362,7 +368,7 @@ private fun Deck(env: PlexEnv, items: List<PlexItem>, index: Int, modifier: Modi
                     .clip(RoundedCornerShape(12.dp))
                     .border(1.dp, Ice.copy(alpha = 0.6f), RoundedCornerShape(12.dp)),
             ) {
-                AsyncImage(env.poster(item), contentDescription = item.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                AsyncImage(env.posterLarge(item), contentDescription = item.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             }
         }
     }
