@@ -143,8 +143,8 @@ settings/                 settings screens for both sides
 |---|---|---|
 | 0 | **Environment** | Android Studio + SDK installed, Shield connected via network ADB, Android TV emulator working, git repo initialized |
 | 1 | **Skeleton + design system** ✅ | Multi-module project builds; app installs on Shield; nav rail, theme, focusable cards/rows, settings storage. *Done on the emulator; modules `app` + `core:designsystem`. Hilt/Room/Retrofit are deferred until first needed (milestones 3 and 5).* |
-| 2 | **Player core** | Plays local/URL test matrix with HW decode, passthrough, AFR, track selection, stats overlay |
-| 3 | **Plex: auth + browse** | PIN login, server discovery, home hubs, libraries, details pages, search |
+| 2 | **Player core** 🟡 | Plays local/URL test matrix with HW decode, passthrough, AFR, track selection, stats overlay. *Done and verified on the emulator (12/14 test streams; the 2 failures are emulator decoder limits: VP9 4K, 10-bit HLG HEVC). **Still to verify on the Shield:** hardware decode, HDR10/DV output, frame-rate switching, passthrough with an AVR.* |
+| 3 | **Plex: auth + browse** | PIN login, server discovery, home hubs, libraries, details pages, search. *Also: per-screen focus memory, so going Right from the drawer returns to the last focused card, not the nearest one (Compose `focusRestorer` alone does not survive the TV drawer).* |
 | 4 | **Plex: playback integration** | Direct play, resume, timeline/scrobble, skip intro/credits, next episode, transcode fallback |
 | 5 | **IPTV: sources + live** | Xtream + M3U login, categories/channels, live playback, fast zapping, favorites |
 | 6 | **IPTV: EPG + guide grid** | XMLTV sync worker, guide grid smooth on Shield, mini guide overlay |
