@@ -4,51 +4,63 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -59,26 +71,15 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.tv.material3.Border
-import androidx.tv.material3.Card
-import androidx.tv.material3.CardDefaults
-import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Glow
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.logan.shieldmedia.designsystem.Backdrop
-import com.logan.shieldmedia.designsystem.FocusMemory
 import com.logan.shieldmedia.designsystem.MessageState
 import com.logan.shieldmedia.designsystem.Motion
-import com.logan.shieldmedia.designsystem.PivotScroll
-import com.logan.shieldmedia.designsystem.RestoreFocus
 import com.logan.shieldmedia.designsystem.ShieldColors
 import com.logan.shieldmedia.designsystem.Spacing
-import com.logan.shieldmedia.designsystem.focusMemory
 import com.logan.shieldmedia.plex.PlexItem
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Libraries that hold reference-quality copies get the showcase treatment. */
@@ -95,30 +96,39 @@ class PlexShowcaseViewModel(private val env: PlexEnv, private val sectionKey: St
     var error by mutableStateOf<String?>(null)
         private set
     var index by mutableIntStateOf(0)
-    /** Full metadata (streams for HDR/audio badges, clear logos), fetched as titles get focus. */
+        private set
+    /** +1 when moving forward, -1 back; drives which way the title slides. */
+    var direction by mutableIntStateOf(1)
+        private set
+    /** Full metadata (streams for HDR/audio badges, clear logos). */
     val details = mutableStateMapOf<String, PlexItem>()
-    val focus = FocusMemory()
-    private var detailJob: Job? = null
+    /** The stage takes all remote input; anyone (e.g. a dialog closing) can hand focus back. */
+    val stageFocus = FocusRequester()
 
     init {
         viewModelScope.launch {
             runCatching { env.library.sectionItems(env.server, sectionKey, 0, 500, sort = "titleSort").metadata }
                 .onSuccess {
                     items = it
-                    it.firstOrNull()?.let(::loadDetails)
+                    prefetchAround(0)
                 }
                 .onFailure { error = it.message ?: "Unknown error" }
         }
     }
 
-    fun onFocus(i: Int) {
-        index = i
-        val item = items?.getOrNull(i) ?: return
-        detailJob?.cancel()
-        detailJob = viewModelScope.launch {
-            delay(180) // don't fetch for every poster flicked past
-            loadDetails(item)
-        }
+    fun move(delta: Int) {
+        val list = items ?: return
+        val next = (index + delta).coerceIn(0, list.lastIndex)
+        if (next == index) return
+        direction = if (next > index) 1 else -1
+        index = next
+        prefetchAround(next)
+    }
+
+    /** Details for this title and its neighbours, so logos/badges are there before you arrive. */
+    private fun prefetchAround(i: Int) {
+        val list = items ?: return
+        (i - 1..i + 2).mapNotNull { list.getOrNull(it) }.forEach(::loadDetails)
     }
 
     private fun loadDetails(item: PlexItem) {
@@ -148,15 +158,47 @@ fun PlexShowcaseScreen(env: PlexEnv, sectionKey: String, title: String, onOpen: 
             vm.error != null -> MessageState("Couldn't load $title", vm.error)
             items == null -> Unit
             items.isEmpty() -> MessageState("$title is empty", "Add some titles to this library in Plex.")
-            else -> Column(Modifier.fillMaxSize()) {
-                Header(title, vm.index, items.size)
-                Spacer(Modifier.weight(1f))
-                Feature(env, detail)
-                Spacer(Modifier.height(28.dp))
-                Carousel(env, items, vm, onOpen)
+            else -> Stage(vm, items, onOpen) {
+                Column(Modifier.fillMaxSize()) {
+                    Header(title, vm.index, items.size)
+                    Row(Modifier.weight(1f).fillMaxWidth()) {
+                        Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Bottom) {
+                            Feature(env, detail, vm.direction)
+                            Spacer(Modifier.height(30.dp))
+                            Hints()
+                        }
+                        Deck(env, items, vm.index, Modifier.fillMaxHeight().width(600.dp))
+                    }
+                    TickBar(vm.index, items.size)
+                }
             }
         }
     }
+}
+
+/** One focusable surface for the whole screen: Left/Right flip titles, OK opens. */
+@Composable
+private fun Stage(vm: PlexShowcaseViewModel, items: List<PlexItem>, onOpen: (PlexItem) -> Unit, content: @Composable () -> Unit) {
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        runCatching { vm.stageFocus.requestFocus() }
+    }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .focusRequester(vm.stageFocus)
+            .onKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (e.key) {
+                    Key.DirectionRight -> { vm.move(1); true }
+                    Key.DirectionLeft -> { vm.move(-1); true }
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { items.getOrNull(vm.index)?.let(onOpen); true }
+                    Key.DirectionUp, Key.DirectionDown -> true // nothing else on screen to move to
+                    else -> false
+                }
+            }
+            .focusable(),
+    ) { content() }
 }
 
 /** Fine scanlines and a vignette: gives the artwork a "screen in a dark room" feel. */
@@ -171,11 +213,13 @@ private fun TechOverlay() {
         }
         drawRect(
             Brush.radialGradient(
-                listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f)),
+                listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f)),
                 center = Offset(size.width * 0.6f, size.height * 0.35f),
                 radius = size.width * 0.75f,
             ),
         )
+        // Extra shade under the text column so the title always reads.
+        drawRect(Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent), endX = size.width * 0.55f))
     }
 }
 
@@ -211,13 +255,7 @@ private fun Header(title: String, index: Int, count: Int) {
             }
         }
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                "%02d".format(index + 1),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 40.sp,
-                fontWeight = FontWeight.Light,
-                color = Color.White,
-            )
+            Text("%02d".format(index + 1), fontFamily = FontFamily.Monospace, fontSize = 40.sp, fontWeight = FontWeight.Light, color = Color.White)
             Text(
                 " / %02d".format(count),
                 fontFamily = FontFamily.Monospace,
@@ -230,42 +268,50 @@ private fun Header(title: String, index: Int, count: Int) {
 }
 
 @Composable
-private fun Feature(env: PlexEnv, item: PlexItem?) {
+private fun Feature(env: PlexEnv, item: PlexItem?, direction: Int) {
     AnimatedContent(
         targetState = item,
-        contentKey = { it?.ratingKey to (it?.media?.firstOrNull()?.parts?.firstOrNull()?.streams?.size ?: 0) },
+        // Only a new title animates; its logo and badges arriving later update in place (no bounce).
+        contentKey = { it?.ratingKey },
         transitionSpec = {
-            (fadeIn(tween(Motion.ENTER_MS + 80, easing = Motion.EaseOut)) + slideInVertically(tween(320, easing = Motion.EaseOut)) { it / 10 }) togetherWith
-                fadeOut(tween(Motion.EXIT_MS))
+            val dx = direction
+            (fadeIn(tween(Motion.ENTER_MS + 120, easing = Motion.EaseOut)) +
+                slideInHorizontally(tween(420, easing = Motion.EaseOut)) { w -> dx * w / 8 }) togetherWith
+                (fadeOut(tween(Motion.EXIT_MS)) + slideOutHorizontally(tween(260, easing = Motion.EaseOut)) { w -> -dx * w / 12 })
         },
-        modifier = Modifier.padding(horizontal = Spacing.ScreenH),
+        contentAlignment = Alignment.BottomStart,
+        modifier = Modifier.padding(start = Spacing.ScreenH).height(290.dp),
         label = "feature",
-    ) { it ->
-        if (it == null) return@AnimatedContent
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            val logo = env.logo(it)
+    ) { shown ->
+        if (shown == null) return@AnimatedContent
+        Column(Modifier.fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.Bottom)) {
+            val logo = env.logo(shown)
             if (logo != null) {
                 AsyncImage(
                     model = logo,
-                    contentDescription = it.title,
+                    contentDescription = shown.title,
                     contentScale = ContentScale.Fit,
-                    alignment = Alignment.CenterStart,
-                    modifier = Modifier.heightIn(max = 110.dp).widthIn(max = 460.dp),
+                    alignment = Alignment.BottomStart,
+                    modifier = Modifier.height(130.dp).widthIn(max = 520.dp),
                 )
             } else {
-                Text(it.title, style = MaterialTheme.typography.displayMedium, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(shown.title, style = MaterialTheme.typography.displayMedium, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                val facts = listOfNotNull(it.year?.toString(), it.duration?.let(::formatDuration)).joinToString("   ")
+            Row(Modifier.height(32.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                val facts = listOfNotNull(shown.year?.toString(), shown.duration?.let(::formatDuration)).joinToString("   ")
                 if (facts.isNotEmpty()) {
                     Text(facts, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelLarge, color = ShieldColors.OnSurfaceMuted)
                     Spacer(Modifier.width(6.dp))
                 }
-                it.specBadges().filter { b -> b != it.contentRating && b != "CC" }.forEach { GlowBadge(it) }
+                shown.specBadges().filter { b -> b != shown.contentRating && b != "CC" }.forEach { GlowBadge(it) }
             }
-            it.tagline?.takeIf { t -> t.isNotBlank() }?.let { t ->
-                Text(t, style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+            Text(
+                shown.tagline?.takeIf { t -> t.isNotBlank() } ?: " ",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White.copy(alpha = 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -276,10 +322,7 @@ private fun GlowBadge(text: String) {
     Box(
         Modifier
             .drawWithContent {
-                drawRoundRect(
-                    Ice.copy(alpha = 0.10f),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()),
-                )
+                drawRoundRect(Ice.copy(alpha = 0.10f), cornerRadius = CornerRadius(6.dp.toPx()))
                 drawContent()
             }
             .border(1.dp, Brush.horizontalGradient(listOf(Ice.copy(alpha = 0.9f), Ice.copy(alpha = 0.35f))), RoundedCornerShape(6.dp))
@@ -294,55 +337,122 @@ private fun GlowBadge(text: String) {
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+/**
+ * The current poster up front, the next two stacked behind it, the previous one sliding away.
+ * Each card animates to its slot, so flipping feels like dealing from a deck.
+ */
 @Composable
-private fun Carousel(env: PlexEnv, items: List<PlexItem>, vm: PlexShowcaseViewModel, onOpen: (PlexItem) -> Unit) {
-    val shape = RoundedCornerShape(10.dp)
-    PivotScroll(pivot = Spacing.ScreenH) {
-        LazyRow(
-            contentPadding = PaddingValues(start = Spacing.ScreenH, end = Spacing.ScreenH, top = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(22.dp),
-        ) {
-            itemsIndexed(items, key = { _, it -> it.ratingKey }) { i, item ->
-                val focused = i == vm.index
-                Column(Modifier.width(132.dp)) {
-                    Card(
-                        onClick = { onOpen(item) },
-                        modifier = Modifier
+private fun Deck(env: PlexEnv, items: List<PlexItem>, index: Int, modifier: Modifier) {
+    Box(modifier.padding(top = 10.dp, bottom = 10.dp), contentAlignment = Alignment.CenterStart) {
+        // Back-to-front so the current card is drawn on top.
+        val visible = (index - 1..index + 2).filter { it in items.indices }.sortedByDescending { it - index }
+        visible.forEach { i ->
+            val item = items[i]
+            key(item.ratingKey) {
+                val slot = i - index
+                val x by animateFloatAsState(if (slot < 0) -160f else slot * 150f, tween(480, easing = Motion.EaseOut), label = "x")
+                val scale by animateFloatAsState(if (slot <= 0) 1f else 1f - 0.14f * slot, tween(480, easing = Motion.EaseOut), label = "s")
+                val alpha by animateFloatAsState(
+                    when {
+                        slot < 0 -> 0f
+                        slot == 0 -> 1f
+                        slot == 1 -> 0.42f
+                        else -> 0.18f
+                    },
+                    tween(400),
+                    label = "a",
+                )
+                val front = slot == 0
+                Column(
+                    Modifier
+                        .width(260.dp)
+                        .graphicsLayer {
+                            translationX = x.dp.toPx()
+                            scaleX = scale
+                            scaleY = scale
+                            this.alpha = alpha
+                            transformOrigin = TransformOrigin(0f, 0.5f)
+                        },
+                ) {
+                    Box(
+                        Modifier
                             .fillMaxWidth()
                             .aspectRatio(2f / 3f)
-                            .focusMemory(vm.focus, item.ratingKey, isDefault = i == 0)
-                            .onFocusChanged { if (it.isFocused) vm.onFocus(i) }
-                            .graphicsLayer { alpha = if (focused) 1f else 0.5f },
-                        shape = CardDefaults.shape(shape),
-                        scale = CardDefaults.scale(focusedScale = 1.12f),
-                        border = CardDefaults.border(
-                            focusedBorder = Border(BorderStroke(2.dp, Ice), shape = shape),
-                        ),
-                        glow = CardDefaults.glow(focusedGlow = Glow(Ice.copy(alpha = 0.55f), 22.dp)),
-                        colors = CardDefaults.colors(containerColor = ShieldColors.SurfaceHigh),
+                            // Soft icy halo under the front poster.
+                            .shadow(
+                                elevation = if (front) 36.dp else 8.dp,
+                                shape = RoundedCornerShape(12.dp),
+                                ambientColor = Ice,
+                                spotColor = Ice,
+                            )
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.5.dp, Ice.copy(alpha = if (front) 0.85f else 0f), RoundedCornerShape(12.dp)),
                     ) {
                         AsyncImage(env.poster(item), contentDescription = item.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     }
-                    Reflection(env.poster(item), visible = focused)
+                    Reflection(env.poster(item), strong = front)
                 }
             }
         }
     }
-    RestoreFocus(vm.focus, ready = true)
 }
 
-/** A faded mirror image under the focused poster, like a glossy floor. */
+/** A slim row of ticks: where you are in the collection, at a glance. */
 @Composable
-private fun Reflection(url: String?, visible: Boolean) {
+private fun TickBar(index: Int, count: Int) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = Spacing.ScreenH, end = Spacing.ScreenH, bottom = 30.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        repeat(count) { i ->
+            val active = i == index
+            val w by animateFloatAsState(if (active) 46f else 16f, tween(300, easing = Motion.EaseOut), label = "w")
+            Box(
+                Modifier
+                    .width(w.dp)
+                    .height(3.dp)
+                    .background(if (active) Ice else Color.White.copy(alpha = 0.22f), RoundedCornerShape(2.dp)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Hints() {
+    Row(
+        Modifier.padding(start = Spacing.ScreenH, bottom = 30.dp),
+        horizontalArrangement = Arrangement.spacedBy(22.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf("◀ ▶" to "BROWSE", "OK" to "OPEN").forEach { (keyLabel, label) ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    keyLabel,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    color = Ice,
+                    modifier = Modifier
+                        .border(1.dp, Ice.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                )
+                Text(label, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.2.em), color = ShieldColors.OnSurfaceMuted)
+            }
+        }
+    }
+}
+
+/** A faded mirror image under the poster, like a glossy floor. */
+@Composable
+private fun Reflection(url: String?, strong: Boolean) {
     Box(
         Modifier
-            .padding(top = 18.dp)
+            .padding(top = 14.dp)
             .fillMaxWidth()
-            .height(54.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .height(70.dp)
+            .clip(RoundedCornerShape(12.dp))
             .graphicsLayer {
-                alpha = if (visible) 0.32f else 0.10f
+                alpha = if (strong) 0.3f else 0.1f
                 compositingStrategy = CompositingStrategy.Offscreen
             }
             .drawWithContent {
@@ -355,10 +465,7 @@ private fun Reflection(url: String?, visible: Boolean) {
             contentDescription = null,
             contentScale = ContentScale.Crop,
             alignment = Alignment.BottomCenter,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f)
-                .graphicsLayer { scaleY = -1f },
+            modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f).graphicsLayer { scaleY = -1f },
         )
     }
 }

@@ -140,7 +140,7 @@ fun PlexVaultScreen(
                     confirm = false
                     scope.launch {
                         withFrameNanos { }
-                        vm.focus.restore() // back to the title you were on
+                        runCatching { vm.stageFocus.requestFocus() }
                     }
                 },
                 onLeave = {
