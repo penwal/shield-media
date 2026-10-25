@@ -141,6 +141,8 @@ fun PlexDetailsScreen(
 ) {
     val vm = viewModel(key = "details-$ratingKey") { PlexDetailsViewModel(env, ratingKey) }
     val state by vm.item.collectAsStateWithLifecycle()
+    // Coming back from the player: pick up the new resume point / watched state.
+    androidx.compose.runtime.LaunchedEffect(Unit) { if (vm.item.value is Loadable.Ready) vm.load() }
 
     Box(Modifier.fillMaxSize()) {
         when (val s = state) {

@@ -65,6 +65,7 @@ import com.logan.shieldmedia.plex.ui.PlexSearchScreen
 import com.logan.shieldmedia.plex.ui.PlexSignInScreen
 import com.logan.shieldmedia.screens.PlaceholderScreen
 import com.logan.shieldmedia.screens.LiveRoute
+import com.logan.shieldmedia.screens.PlexPlayRoute
 import com.logan.shieldmedia.screens.PlayerRoute
 import com.logan.shieldmedia.iptv.ChannelFilter
 import com.logan.shieldmedia.iptv.ui.AddIptvSourceScreen
@@ -79,6 +80,7 @@ import kotlinx.coroutines.launch
 private const val MAIN_ROUTE = "main"
 private const val PLAYER_ROUTE = "player?uri={uri}&title={title}&start={start}"
 private const val PLEX_SIGN_IN_ROUTE = "plex_sign_in"
+private const val PLEX_PLAY_ROUTE = "plex_play/{ratingKey}?fromStart={fromStart}"
 private const val PLAYER_TEST_ROUTE = "player_test"
 private const val PLEX_ITEM_ROUTE = "plex/item/{ratingKey}"
 private const val IPTV_SOURCES_ROUTE = "iptv/sources"
@@ -107,6 +109,7 @@ fun AppNavigation(container: AppContainer) {
                     rootNav.navigate("player?uri=${Uri.encode(uri)}&title=${Uri.encode(title)}&start=$startMs")
                 },
                 onPlexSignIn = { rootNav.navigate(PLEX_SIGN_IN_ROUTE) },
+                onPlayPlex = { ratingKey, fromStart -> rootNav.navigate("plex_play/$ratingKey?fromStart=$fromStart") },
                 onPlayLive = { channel, filter ->
                     rootNav.navigate("live?playlist=${channel.playlistId}&filter=${Uri.encode(filter.key)}&channel=${channel.id}")
                 },
@@ -145,6 +148,20 @@ fun AppNavigation(container: AppContainer) {
                 onExit = { rootNav.popBackStack() },
             )
         }
+        composable(
+            PLEX_PLAY_ROUTE,
+            arguments = listOf(
+                navArgument("ratingKey") { type = NavType.StringType },
+                navArgument("fromStart") { type = NavType.BoolType; defaultValue = false },
+            ),
+        ) { entry ->
+            PlexPlayRoute(
+                container = container,
+                ratingKey = entry.arguments?.getString("ratingKey").orEmpty(),
+                fromStart = entry.arguments?.getBoolean("fromStart") ?: false,
+                onExit = { rootNav.popBackStack() },
+            )
+        }
         composable(PLEX_SIGN_IN_ROUTE) {
             PlexSignInScreen(
                 session = container.plexSession,
@@ -161,6 +178,7 @@ private fun MainScaffold(
     container: AppContainer,
     onPlay: PlayHandler,
     onPlexSignIn: () -> Unit,
+    onPlayPlex: com.logan.shieldmedia.plex.ui.PlexPlayHandler,
     onPlayLive: LivePlayHandler,
 ) {
     val navController = rememberNavController()
@@ -289,7 +307,7 @@ private fun MainScaffold(
                     exitTransition = { fadeOut(tween(150)) },
                 ) {
                     composable(Destination.Home.route) {
-                        plex { env -> PlexHomeScreen(env, onOpen = openItem, onPlay = onPlay) }
+                        plex { env -> PlexHomeScreen(env, onOpen = openItem, onPlay = onPlayPlex) }
                     }
                     composable(Destination.Movies.route) {
                         plex { env -> PlexLibraryScreen(env, sectionType = "movie", title = "Movies", onOpen = openItem) }
@@ -325,7 +343,7 @@ private fun MainScaffold(
                         arguments = listOf(navArgument("ratingKey") { type = NavType.StringType }),
                     ) { entry ->
                         val ratingKey = entry.arguments?.getString("ratingKey").orEmpty()
-                        plex { env -> PlexDetailsScreen(env, ratingKey, onOpen = openItem, onPlay = onPlay) }
+                        plex { env -> PlexDetailsScreen(env, ratingKey, onOpen = openItem, onPlay = onPlayPlex) }
                     }
                 }
             }

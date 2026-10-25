@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -109,6 +110,11 @@ private enum class SubtitleSize(val label: String, val scale: Float) {
 
 
 private const val OSD_TIMEOUT_MS = 5_000L
+private const val REPORT_INTERVAL_MS = 10_000L
+private const val UP_NEXT_SECONDS = 10
+private const val SEEK_BACK_MS = 10_000L
+private const val SEEK_FORWARD_MS = 30_000L
+private const val SEEK_COMMIT_MS = 650L
 
 @Composable
 fun PlayerScreen(
@@ -119,6 +125,8 @@ fun PlayerScreen(
     startPositionMs: Long = 0L,
     /** What is being played, e.g. "Direct Play · Original"; shown under the title and in stats. */
     sourceLabel: String? = null,
+    /** Progress reporting, skip markers, Up Next and fallback for library content (Plex). */
+    session: PlaybackSession? = null,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -149,6 +157,18 @@ fun PlayerScreen(
     var zoom by remember { mutableStateOf(Zoom.Fit) }
     var subtitleSize by remember { mutableStateOf(SubtitleSize.Normal) }
     var statsSnapshot by remember { mutableStateOf<PlaybackStats?>(null) }
+    var label by remember { mutableStateOf(sourceLabel) }
+    var triedFallback by remember { mutableStateOf(false) }
+    // A fallback stream starts at the resume point, so its timeline is offset from the file's.
+    var timelineOffsetMs by remember { mutableLongStateOf(0L) }
+    var upNext by remember { mutableStateOf<UpNext?>(null) }
+    // Skips accumulate into a target shown on the seek bar; the actual seek happens once the
+    // presses stop, so holding Right scrubs smoothly instead of queueing dozens of network seeks.
+    var pendingSeek by remember { mutableStateOf<Long?>(null) }
+    var seekInputAt by remember { mutableLongStateOf(0L) }
+    var upNextRequested by remember { mutableStateOf(false) }
+    var upNextDismissed by remember { mutableStateOf(false) }
+    var upNextCountdown by remember { mutableIntStateOf(UP_NEXT_SECONDS) }
 
     val rootFocus = remember { FocusRequester() }
     val playFocus = remember { FocusRequester() }
@@ -158,6 +178,37 @@ fun PlayerScreen(
     val settingsFocus = remember { FocusRequester() }
     // When a track panel closes, focus goes back to the button that opened it.
     var returnFocus by remember { mutableStateOf<FocusRequester?>(null) }
+
+    fun fileDuration() = player.duration.coerceAtLeast(0L) + timelineOffsetMs
+    fun filePosition() = player.currentPosition + timelineOffsetMs
+
+    /** Original file failed here: ask the session for a converted stream once. */
+    fun tryFallback(cause: PlaybackException?): Boolean {
+        val s = session ?: return false
+        if (triedFallback) return false
+        triedFallback = true
+        val resumeAt = filePosition()
+        scope.launch {
+            val uri = s.fallbackUri(resumeAt)
+            if (uri == null) {
+                error = cause
+                return@launch
+            }
+            error = null
+            timelineOffsetMs = resumeAt
+            label = "Transcoding · converted by Plex"
+            player.setMediaItem(MediaItem.fromUri(uri))
+            player.prepare()
+            player.playWhenReady = true
+        }
+        return true
+    }
+
+    fun nudge(deltaMs: Long) {
+        val dur = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+        pendingSeek = ((pendingSeek ?: player.currentPosition) + deltaMs).coerceIn(0, dur)
+        seekInputAt = System.nanoTime()
+    }
 
     fun showOsd(focus: OsdFocus) {
         if (!osdVisible) osdFocus = focus
@@ -169,10 +220,17 @@ fun PlayerScreen(
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
+                if (player.playbackState != Player.STATE_ENDED) {
+                    session?.report(if (playing) PlaybackReport.Playing else PlaybackReport.Paused, filePosition(), fileDuration())
+                }
             }
 
             override fun onPlaybackStateChanged(state: Int) {
                 playbackState = state
+                if (state == Player.STATE_ENDED && session != null) {
+                    // Finished: roll into the next episode, or go back to where playback started.
+                    if (upNext != null && !upNextDismissed) session.playUpNext() else onExit()
+                }
             }
 
             override fun onVideoSizeChanged(size: VideoSize) {
@@ -182,7 +240,10 @@ fun PlayerScreen(
             }
 
             override fun onPlayerError(e: PlaybackException) {
-                error = e
+                // Decoder, container or audio-output failures mean this device can't play the
+                // original file; anything else (network, server) is shown as an error.
+                val unsupported = e.errorCode in 3000..3999 || e.errorCode in 4000..4999 || e.errorCode in 5000..5999
+                if (!(unsupported && tryFallback(e))) error = e
             }
 
             override fun onCues(cueGroup: CueGroup) {
@@ -191,6 +252,11 @@ fun PlayerScreen(
 
             override fun onTracksChanged(tracks: Tracks) {
                 tracksVersion++
+                // A video track nothing here can decode plays as silence-with-sound; convert instead.
+                val video = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+                if (video.isNotEmpty() && video.none { g -> (0 until g.length).any { g.isTrackSupported(it) } }) {
+                    tryFallback(null)
+                }
                 val fps = tracks.selectedVideoFormat()?.frameRate ?: return
                 if (frameRateHandled || fps <= 0f) return
                 frameRateHandled = true
@@ -209,6 +275,7 @@ fun PlayerScreen(
         player.prepare()
         player.playWhenReady = true
         onDispose {
+            session?.report(PlaybackReport.Stopped, filePosition(), fileDuration())
             player.removeListener(listener)
             player.release()
             frameRateMatcher.restore()
@@ -225,18 +292,60 @@ fun PlayerScreen(
     }
 
     LaunchedEffect(player) {
+        var sinceReport = 0L
         while (true) {
             position = player.currentPosition
             duration = player.duration.coerceAtLeast(0L)
             buffered = player.bufferedPosition
             delay(500)
+            sinceReport += 500
+            if (sinceReport >= REPORT_INTERVAL_MS && player.isPlaying) {
+                sinceReport = 0
+                session?.report(PlaybackReport.Playing, filePosition(), fileDuration())
+            }
         }
+    }
+
+    LaunchedEffect(seekInputAt) {
+        val target = pendingSeek ?: return@LaunchedEffect
+        delay(SEEK_COMMIT_MS)
+        player.seekTo(target)
+        position = target
+        pendingSeek = null
+    }
+
+    // Skip Intro / Skip Credits: whichever marker the playhead is inside.
+    val filePos = position + timelineOffsetMs
+    val fileDur = duration + timelineOffsetMs
+    val activeMarker = session?.markers?.firstOrNull { filePos in it.startMs until it.endMs }
+    val creditsStart = session?.markers?.firstOrNull { it.isCredits }?.startMs
+    // Up Next shows at the credits, or 30 s from the end when the server found no credits.
+    val nearEnd = fileDur > 0 && (
+        (creditsStart != null && filePos >= creditsStart) || (creditsStart == null && fileDur - filePos <= 30_000)
+        )
+    LaunchedEffect(fileDur > 0 && fileDur - filePos < 4 * 60_000) {
+        if (session != null && !upNextRequested && fileDur > 0 && fileDur - filePos < 4 * 60_000) {
+            upNextRequested = true
+            upNext = session.loadUpNext()
+        }
+    }
+    val showUpNext = nearEnd && upNext != null && !upNextDismissed && error == null
+    LaunchedEffect(showUpNext) {
+        if (!showUpNext) {
+            upNextCountdown = UP_NEXT_SECONDS
+            return@LaunchedEffect
+        }
+        while (upNextCountdown > 0) {
+            delay(1_000)
+            if (player.isPlaying) upNextCountdown--
+        }
+        session?.playUpNext()
     }
 
     LaunchedEffect(statsVisible) {
         while (statsVisible) {
             val snap = stats.snapshot(player, frameRateMatcher.currentModeLabel())
-            statsSnapshot = if (sourceLabel != null) PlaybackStats(listOf("Source" to sourceLabel) + snap.lines) else snap
+            statsSnapshot = label?.let { PlaybackStats(listOf("Source" to it) + snap.lines) } ?: snap
             delay(1_000)
         }
     }
@@ -263,6 +372,7 @@ fun PlayerScreen(
 
     BackHandler {
         when {
+            showUpNext -> upNextDismissed = true
             panel != null -> panel = null
             osdVisible -> osdVisible = false
             else -> onExit()
@@ -281,23 +391,31 @@ fun PlayerScreen(
                         player.togglePlayPause(); showOsd(OsdFocus.PlayPause); true
                     }
                     Key.MediaFastForward -> {
-                        player.seekForward(); showOsd(OsdFocus.SeekBar); true
+                        nudge(SEEK_FORWARD_MS); showOsd(OsdFocus.SeekBar); true
                     }
                     Key.MediaRewind -> {
-                        player.seekBack(); showOsd(OsdFocus.SeekBar); true
+                        nudge(-SEEK_BACK_MS); showOsd(OsdFocus.SeekBar); true
                     }
                     else -> if (osdVisible || panel != null) {
                         false
                     } else {
                         when (event.key) {
                             Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                                player.togglePlayPause(); showOsd(OsdFocus.PlayPause); true
+                                when {
+                                    showUpNext -> session?.playUpNext()
+                                    activeMarker != null -> player.seekTo(activeMarker.endMs - timelineOffsetMs)
+                                    else -> {
+                                        player.togglePlayPause()
+                                        showOsd(OsdFocus.PlayPause)
+                                    }
+                                }
+                                true
                             }
                             Key.DirectionLeft -> {
-                                player.seekBack(); showOsd(OsdFocus.SeekBar); true
+                                nudge(-SEEK_BACK_MS); showOsd(OsdFocus.SeekBar); true
                             }
                             Key.DirectionRight -> {
-                                player.seekForward(); showOsd(OsdFocus.SeekBar); true
+                                nudge(SEEK_FORWARD_MS); showOsd(OsdFocus.SeekBar); true
                             }
                             Key.DirectionUp, Key.DirectionDown -> {
                                 showOsd(OsdFocus.PlayPause); true
@@ -352,9 +470,9 @@ fun PlayerScreen(
         ) {
             Osd(
                 title = title,
-                sourceLabel = sourceLabel,
+                sourceLabel = label,
                 isPlaying = isPlaying,
-                position = position,
+                position = pendingSeek ?: position,
                 duration = duration,
                 buffered = buffered,
                 playFocus = playFocus,
@@ -363,8 +481,8 @@ fun PlayerScreen(
                 subtitlesFocus = subtitlesFocus,
                 settingsFocus = settingsFocus,
                 onTogglePlay = { player.togglePlayPause() },
-                onSeekBack = { player.seekBack() },
-                onSeekForward = { player.seekForward() },
+                onSeekBack = { nudge(-SEEK_BACK_MS) },
+                onSeekForward = { nudge(SEEK_FORWARD_MS) },
                 onAudio = {
                     returnFocus = audioFocus
                     panel = TrackPanel.Audio
@@ -409,7 +527,7 @@ fun PlayerScreen(
                 TrackPanel.Settings -> buildList {
                     add(PanelRow.Header("Quality"))
                     // Always the untouched original file; transcoding is only ever a fallback.
-                    add(PanelRow.Option("Original", sourceLabel ?: "Plays the stream as-is", true) {})
+                    add(PanelRow.Option(if (timelineOffsetMs > 0 || triedFallback) "Converted by Plex" else "Original", label ?: "Plays the stream as-is", true) {})
                     add(PanelRow.Header("Audio delay"))
                     AudioDelay.STEPS.forEach { ms ->
                         add(
@@ -436,6 +554,26 @@ fun PlayerScreen(
                 rows = rows,
                 emptyText = "No tracks available",
             )
+        }
+
+        // Skip and Up Next sit bottom-right, above where the OSD controls appear.
+        val promptModifier = Modifier.align(Alignment.BottomEnd).padding(end = 56.dp, bottom = if (osdVisible) 170.dp else 56.dp)
+        val next = upNext
+        AnimatedVisibility(
+            visible = showUpNext && next != null && panel == null,
+            enter = fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 4 },
+            exit = fadeOut(tween(150)),
+            modifier = promptModifier,
+        ) {
+            if (next != null) UpNextCard(next, upNextCountdown, osdHidden = !osdVisible)
+        }
+        AnimatedVisibility(
+            visible = activeMarker != null && !showUpNext && panel == null && error == null,
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(150)),
+            modifier = promptModifier,
+        ) {
+            SkipPrompt(activeMarker?.label ?: "", osdHidden = !osdVisible)
         }
 
         error?.let { ErrorOverlay(it, Modifier.align(Alignment.Center)) }
@@ -593,6 +731,55 @@ private fun SeekBar(
         drawRoundRect(ShieldColors.Accent, Offset(0f, top), Size(size.width * played, barHeight), radius)
         if (focused) {
             drawCircle(Color.White, radius = 9.dp.toPx(), center = Offset(size.width * played, size.height / 2))
+        }
+    }
+}
+
+@Composable
+private fun SkipPrompt(text: String, osdHidden: Boolean) {
+    Row(
+        Modifier
+            .background(Color.White, RoundedCornerShape(50))
+            .padding(horizontal = 22.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(text, style = MaterialTheme.typography.titleSmall, color = ShieldColors.Background)
+        if (osdHidden) {
+            Text("OK", style = MaterialTheme.typography.labelSmall, color = ShieldColors.OnSurfaceFaint)
+        }
+    }
+}
+
+@Composable
+private fun UpNextCard(next: UpNext, secondsLeft: Int, osdHidden: Boolean) {
+    Row(
+        Modifier
+            .width(460.dp)
+            .background(ShieldColors.Surface.copy(alpha = 0.95f), RoundedCornerShape(16.dp))
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(150.dp).aspectRatio(16f / 9f).background(ShieldColors.SurfaceHigh, RoundedCornerShape(10.dp))) {
+            coil3.compose.AsyncImage(
+                model = next.imageUrl,
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)),
+            )
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("UP NEXT  ·  ${secondsLeft}s", style = MaterialTheme.typography.labelSmall, color = ShieldColors.Accent)
+            Text(next.title, style = MaterialTheme.typography.titleMedium, color = ShieldColors.OnSurface, maxLines = 1)
+            next.subtitle?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = ShieldColors.OnSurfaceMuted, maxLines = 1)
+            }
+            Text(
+                if (osdHidden) "OK to play now · Back to keep watching" else "Back to keep watching",
+                style = MaterialTheme.typography.labelSmall,
+                color = ShieldColors.OnSurfaceFaint,
+            )
         }
     }
 }

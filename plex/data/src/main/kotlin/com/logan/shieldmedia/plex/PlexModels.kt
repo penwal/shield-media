@@ -120,6 +120,7 @@ data class PlexItem(
     @SerialName("Role") val roles: List<PlexRole> = emptyList(),
     @SerialName("Media") val media: List<PlexMedia> = emptyList(),
     @SerialName("Image") val images: List<PlexImage> = emptyList(),
+    @SerialName("Marker") val markers: List<PlexMarker> = emptyList(),
 ) {
     val isWatched: Boolean
         get() = if (leafCount != null) (viewedLeafCount ?: 0) >= leafCount else (viewCount ?: 0) > 0
@@ -150,6 +151,15 @@ data class PlexTag(val tag: String)
 
 @Serializable
 data class PlexRole(val tag: String, val role: String? = null, val thumb: String? = null)
+
+/** Intro/credits ranges Plex detects (requires the server's marker analysis). */
+@Serializable
+data class PlexMarker(
+    val type: String = "",
+    val startTimeOffset: Long = 0,
+    val endTimeOffset: Long = 0,
+    val final: Boolean? = null,
+)
 
 @Serializable
 data class PlexImage(val type: String = "", val url: String = "")

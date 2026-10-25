@@ -29,6 +29,12 @@ import androidx.tv.material3.Text
 import com.logan.shieldmedia.designsystem.ScreenTitle
 import com.logan.shieldmedia.navigation.PlayHandler
 import com.logan.shieldmedia.player.PlaybackConfig
+import com.logan.shieldmedia.AppContainer
+import com.logan.shieldmedia.plex.PlexState
+import com.logan.shieldmedia.plex.ui.PlexEnv
+import com.logan.shieldmedia.plex.ui.PlexPlayerRoute
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import com.logan.shieldmedia.iptv.ChannelFilter
 import com.logan.shieldmedia.iptv.DEFAULT_USER_AGENT
 import com.logan.shieldmedia.iptv.IptvRepository
@@ -36,6 +42,28 @@ import com.logan.shieldmedia.iptv.ui.LivePlayerScreen
 import com.logan.shieldmedia.player.PlayerScreen
 import com.logan.shieldmedia.settings.SettingsRepository
 import kotlinx.coroutines.flow.first
+
+/** Plex playback: needs a connected server, then hands off to the Plex-aware player. */
+@Composable
+fun PlexPlayRoute(container: AppContainer, ratingKey: String, fromStart: Boolean, onExit: () -> Unit) {
+    val plexState by container.plexSession.state.collectAsState()
+    val config by produceState<PlaybackConfig?>(initialValue = null) {
+        val s = container.settings.playerSettings.first()
+        value = PlaybackConfig(
+            autoFrameRate = s.autoFrameRate,
+            audioPassthrough = s.audioPassthrough,
+            showStats = s.showStatsOverlay,
+        )
+    }
+    val server = (plexState as? PlexState.Ready)?.server
+    val loaded = config
+    if (server == null || loaded == null) {
+        Box(Modifier.fillMaxSize().background(Color.Black))
+    } else {
+        val env = remember(server) { PlexEnv(container.plexLibrary, server) }
+        PlexPlayerRoute(env, ratingKey, fromStart, loaded, onExit)
+    }
+}
 
 /** Live TV: same saved player settings, handed to the zapping player. */
 @Composable

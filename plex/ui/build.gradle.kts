@@ -22,6 +22,7 @@ android {
 dependencies {
     api(project(":plex:data"))
     implementation(project(":core:designsystem"))
+    implementation(project(":core:player"))
 
     val bom = platform(libs.androidx.compose.bom)
     implementation(bom)

@@ -57,6 +57,15 @@ internal class PlexHttp(private val client: OkHttpClient) {
         deserializer: DeserializationStrategy<T>,
     ): T = execute(url, "POST", info, token, client).let { plexJson.decodeFromString(deserializer, it) }
 
+    /** Fire-and-check request whose body we don't need (timeline, scrobble). */
+    suspend fun send(url: HttpUrl, info: PlexClientInfo, token: String?, method: String = "GET") {
+        execute(url, method, info, token, client)
+    }
+
+    /** Plex identity headers as query parameters, for URLs handed to the player. */
+    fun identityQuery(info: PlexClientInfo): Map<String, String> =
+        headers(info, null).filterKeys { it.startsWith("X-Plex-") }
+
     /** Returns true if the server answers at all; used to pick a working connection. */
     suspend fun ping(url: HttpUrl, info: PlexClientInfo, token: String?, client: OkHttpClient): Boolean =
         runCatching { execute(url, "GET", info, token, client) }.isSuccess
@@ -71,7 +80,7 @@ internal class PlexHttp(private val client: OkHttpClient) {
         val request = Request.Builder()
             .url(url)
             .apply { headers(info, token).forEach { (k, v) -> header(k, v) } }
-            .method(method, if (method == "POST") ByteArray(0).toRequestBody() else null)
+            .method(method, if (method == "POST" || method == "PUT") ByteArray(0).toRequestBody() else null)
             .build()
         client.newCall(request).execute().use { response ->
             val body = response.body.string()

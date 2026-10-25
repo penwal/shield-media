@@ -35,7 +35,8 @@ class PlexLibrary(private val session: PlexSession) {
         )
 
     suspend fun item(server: ActiveServer, ratingKey: String): PlexItem? =
-        server.container("/library/metadata/$ratingKey", "includeImages" to 1).metadata.firstOrNull()
+        server.container("/library/metadata/$ratingKey", "includeImages" to 1, "includeMarkers" to 1)
+            .metadata.firstOrNull()
 
     suspend fun children(server: ActiveServer, ratingKey: String): List<PlexItem> =
         server.container("/library/metadata/$ratingKey/children", "includeImages" to 1).metadata
@@ -55,6 +56,74 @@ class PlexLibrary(private val session: PlexSession) {
             "url" to path,
             "X-Plex-Token" to server.token,
         ).toString()
+    }
+
+    // ---- playback state ----
+
+    /**
+     * Tells the server where playback is. This drives Continue Watching everywhere, the "Now
+     * Playing" view in Plex, and marks the item watched once a stopped report passes ~90%.
+     */
+    suspend fun timeline(server: ActiveServer, item: PlexItem, state: String, timeMs: Long, durationMs: Long) {
+        http.send(
+            server.url(
+                "/:/timeline",
+                "ratingKey" to item.ratingKey,
+                "key" to "/library/metadata/${item.ratingKey}",
+                "state" to state,
+                "time" to timeMs,
+                "duration" to durationMs,
+                "identifier" to "com.plexapp.plugins.library",
+            ),
+            session.clientInfo,
+            server.token,
+        )
+    }
+
+    suspend fun markWatched(server: ActiveServer, ratingKey: String) {
+        http.send(server.url("/:/scrobble", "key" to ratingKey, "identifier" to "com.plexapp.plugins.library"), session.clientInfo, server.token)
+    }
+
+    suspend fun markUnwatched(server: ActiveServer, ratingKey: String) {
+        http.send(server.url("/:/unscrobble", "key" to ratingKey, "identifier" to "com.plexapp.plugins.library"), session.clientInfo, server.token)
+    }
+
+    /** The episode after [episode]: next in its season, else the first of the following season. */
+    suspend fun nextEpisode(server: ActiveServer, episode: PlexItem): PlexItem? {
+        val seasonKey = episode.parentRatingKey ?: return null
+        val inSeason = children(server, seasonKey).sortedBy { it.index ?: 0 }
+        inSeason.firstOrNull { (it.index ?: 0) > (episode.index ?: 0) }?.let { return it }
+        val showKey = episode.grandparentRatingKey ?: return null
+        val seasons = children(server, showKey).sortedBy { it.index ?: 0 }
+        val nextSeason = seasons.firstOrNull { (it.index ?: 0) > (episode.parentIndex ?: 0) } ?: return null
+        return children(server, nextSeason.ratingKey).minByOrNull { it.index ?: 0 }
+    }
+
+    /**
+     * Last resort when the original file can't play here: ask Plex to convert it to HLS.
+     * Direct stream (remux, original video/audio when possible) is tried before a full transcode.
+     */
+    fun transcodeUrl(server: ActiveServer, item: PlexItem, offsetMs: Long, sessionId: String): String {
+        val query = mutableListOf<Pair<String, Any>>(
+            "path" to "/library/metadata/${item.ratingKey}",
+            "mediaIndex" to 0,
+            "partIndex" to 0,
+            "protocol" to "hls",
+            "offset" to offsetMs / 1000,
+            "fastSeek" to 1,
+            "directPlay" to 0,
+            "directStream" to 1,
+            "directStreamAudio" to 1,
+            "videoQuality" to 100,
+            "maxVideoBitrate" to 40_000,
+            "videoResolution" to "3840x2160",
+            "subtitles" to "auto",
+            "session" to sessionId,
+            "X-Plex-Session-Identifier" to sessionId,
+            "X-Plex-Token" to server.token,
+        )
+        http.identityQuery(session.clientInfo).forEach { (k, v) -> query += k to v }
+        return server.url("/video/:/transcode/universal/start.m3u8", *query.toTypedArray()).toString()
     }
 
     /** Direct-play URL for a media part: the original file, untouched. */

@@ -5,8 +5,8 @@ import com.logan.shieldmedia.plex.PlexItem
 import com.logan.shieldmedia.plex.PlexLibrary
 import com.logan.shieldmedia.plex.PlexStream
 
-/** Starts playback: uri, title shown in the player, resume position. */
-typealias PlexPlayHandler = (uri: String, title: String, startMs: Long) -> Unit
+/** Starts playback of a Plex item; [fromStart] ignores any saved position. */
+typealias PlexPlayHandler = (ratingKey: String, fromStart: Boolean) -> Unit
 
 sealed interface Loadable<out T> {
     data object Loading : Loadable<Nothing>
@@ -24,8 +24,8 @@ class PlexEnv(val library: PlexLibrary, val server: ActiveServer) {
     fun person(path: String?): String? = library.imageUrl(server, path, 200, 200)
 
     fun play(item: PlexItem, fromStart: Boolean, onPlay: PlexPlayHandler): Boolean {
-        val part = item.media.firstOrNull()?.parts?.firstOrNull() ?: return false
-        onPlay(library.directPlayUrl(server, part), item.playerTitle(), if (fromStart) 0L else item.viewOffset ?: 0L)
+        if (item.type !in setOf("movie", "episode")) return false
+        onPlay(item.ratingKey, fromStart)
         return true
     }
 }
