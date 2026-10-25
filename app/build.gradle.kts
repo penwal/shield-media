@@ -30,6 +30,7 @@ android {
 
 dependencies {
     implementation(project(":core:designsystem"))
+    implementation(project(":core:player"))
 
     val bom = platform(libs.androidx.compose.bom)
     implementation(bom)

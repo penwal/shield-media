@@ -48,8 +48,9 @@ fun PlaceholderScreen(title: String, subtitle: String) {
     }
 }
 
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun SettingsScreen(repository: SettingsRepository) {
+fun SettingsScreen(repository: SettingsRepository, onOpenPlayerTest: () -> Unit) {
     val settings by repository.playerSettings.collectAsState(initial = PlayerSettings())
     val scope = rememberCoroutineScope()
 
@@ -68,6 +69,13 @@ fun SettingsScreen(repository: SettingsRepository) {
             SettingRow("Show playback stats overlay", settings.showStatsOverlay) {
                 scope.launch { repository.setShowStatsOverlay(it) }
             }
+            ListItem(
+                selected = false,
+                onClick = onOpenPlayerTest,
+                headlineContent = { Text("Player test streams", style = MaterialTheme.typography.titleMedium) },
+                supportingContent = { Text("Try codecs, subtitles and streaming formats") },
+                modifier = Modifier.fillMaxWidth(0.6f).padding(top = 16.dp),
+            )
         }
     }
 }

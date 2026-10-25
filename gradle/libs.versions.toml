@@ -8,6 +8,9 @@ navigationCompose = "2.10.2"
 lifecycle = "2.11.0"
 datastore = "1.3.0"
 coil = "3.6.3"
+# Pinned to match the Jellyfin FFmpeg decoder build (media3-ffmpeg-decoder 1.9.0+1).
+media3 = "1.9.4"
+jellyfinFfmpeg = "1.9.0+1"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -24,6 +27,11 @@ androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
+androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
+androidx-media3-exoplayer-hls = { module = "androidx.media3:media3-exoplayer-hls", version.ref = "media3" }
+androidx-media3-exoplayer-dash = { module = "androidx.media3:media3-exoplayer-dash", version.ref = "media3" }
+androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
+jellyfin-media3-ffmpeg = { module = "org.jellyfin.media3:media3-ffmpeg-decoder", version.ref = "jellyfinFfmpeg" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
