@@ -387,7 +387,7 @@ private fun LeaveDialog(title: String, onStay: () -> Unit, onLeave: () -> Unit) 
             )
             Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 SecondaryButton("Stay", onClick = onStay, modifier = Modifier.focusRequester(stayFocus))
-                PrimaryButton("Yes, exit", onClick = onLeave)
+                PrimaryButton("Exit", onClick = onLeave)
             }
         }
     }
