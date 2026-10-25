@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -267,6 +268,18 @@ private fun MainScaffold(
     }
 
     val drawerFocus = remember { FocusRequester() }
+    val plexState by container.plexSession.state.collectAsState()
+    // Current profile's name and avatar for the menu (Home profile if switched, else the account).
+    val profile by androidx.compose.runtime.produceState<Pair<String, String?>?>(null, plexState) {
+        value = if (plexState is com.logan.shieldmedia.plex.PlexState.Ready) {
+            val session = container.plexSession
+            val account = session.user()
+            val name = session.currentProfileName() ?: account?.let { it.title ?: it.username }
+            name?.let { n -> n to (session.homeUsers().firstOrNull { it.title == n }?.thumb ?: account?.thumb) }
+        } else {
+            null
+        }
+    }
     val scope = rememberCoroutineScope()
 
     val openItem: (PlexItem) -> Unit = { navController.navigate("plex/item/${it.ratingKey}") }
@@ -283,27 +296,13 @@ private fun MainScaffold(
             // Even dim behind the open menu; the menu itself is a solid panel, so nothing shows through.
             scrimBrush = SolidColor(Color.Black.copy(alpha = 0.6f)),
             drawerContent = { drawerValue ->
-                val open = drawerValue == DrawerValue.Open
-                Column(
-                    Modifier
-                        .fillMaxHeight()
-                        .background(if (open) ShieldColors.Surface else ShieldColors.Background)
-                        .drawWithContent {
-                            drawContent()
-                            if (open) {
-                                // Hairline edge plus a soft shadow falling onto the dimmed content.
-                                drawRect(ShieldColors.Hairline, topLeft = Offset(size.width - 1.dp.toPx(), 0f), size = Size(1.dp.toPx(), size.height))
-                                drawRect(
-                                    Brush.horizontalGradient(
-                                        listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent),
-                                        startX = size.width,
-                                        endX = size.width + 24.dp.toPx(),
-                                    ),
-                                    topLeft = Offset(size.width, 0f),
-                                    size = Size(24.dp.toPx(), size.height),
-                                )
-                            }
-                        }
+                SideMenu(
+                    drawerValue = drawerValue,
+                    currentSection = lastSection,
+                    profileName = profile?.first,
+                    profileImage = profile?.second,
+                    currentFocus = drawerFocus,
+                    modifier = Modifier
                         .onFocusChanged {
                             if (it.hasFocus && !drawerHasFocus) {
                                 drawerEnteredByUser = SystemClock.uptimeMillis() - lastKeyAt < 500
@@ -312,58 +311,18 @@ private fun MainScaffold(
                         }
                         // Entering the menu always lands on the current section, not the nearest item.
                         .focusProperties { onEnter = { drawerFocus.requestFocus() } }
-                        .focusGroup()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
-                ) {
-                    Destination.entries.forEach { dest ->
-                        val selected = lastSection == dest.route
-                        NavigationDrawerItem(
-                            selected = selected,
-                            modifier = Modifier
-                                .then(if (selected) Modifier.focusRequester(drawerFocus) else Modifier)
-                                // Current section: a slim gold marker rather than a filled pill.
-                                .drawBehind {
-                                    if (selected) {
-                                        val h = 18.dp.toPx()
-                                        drawRoundRect(
-                                            color = ShieldColors.Accent,
-                                            topLeft = Offset(0f, (size.height - h) / 2),
-                                            size = Size(3.dp.toPx(), h),
-                                            cornerRadius = CornerRadius(2.dp.toPx()),
-                                        )
-                                    }
-                                },
-                            shape = NavigationDrawerItemDefaults.shape(RoundedCornerShape(12.dp)),
-                            scale = NavigationDrawerItemDefaults.scale(focusedScale = 1f),
-                            colors = NavigationDrawerItemDefaults.colors(
-                                containerColor = Color.Transparent,
-                                contentColor = ShieldColors.OnSurfaceMuted,
-                                inactiveContentColor = ShieldColors.OnSurfaceFaint,
-                                focusedContainerColor = Color.White.copy(alpha = 0.1f),
-                                focusedContentColor = ShieldColors.OnSurface,
-                                selectedContainerColor = Color.Transparent,
-                                selectedContentColor = ShieldColors.OnSurface,
-                                focusedSelectedContainerColor = Color.White.copy(alpha = 0.1f),
-                                focusedSelectedContentColor = ShieldColors.OnSurface,
-                                pressedContainerColor = Color.White.copy(alpha = 0.16f),
-                                pressedContentColor = ShieldColors.OnSurface,
-                            ),
-                            onClick = {
-                                if (currentRoute != dest.route) {
-                                    navigatedFromDrawer = true
-                                    navController.navigate(dest.route) {
-                                        popUpTo(Destination.Home.route)
-                                        launchSingleTop = true
-                                    }
-                                }
-                            },
-                            leadingContent = { ShieldIcon(dest.icon, contentDescription = dest.label, size = 22.dp) },
-                        ) {
-                            Text(dest.label, style = MaterialTheme.typography.titleMedium)
+                        .focusGroup(),
+                    onSelect = { dest ->
+                        if (currentRoute != dest.route) {
+                            navigatedFromDrawer = true
+                            navController.navigate(dest.route) {
+                                popUpTo(Destination.Home.route)
+                                launchSingleTop = true
+                            }
                         }
-                    }
-                }
+                    },
+                    onProfile = onPlexProfiles,
+                )
             },
         ) {
             Box(
