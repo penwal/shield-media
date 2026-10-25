@@ -67,6 +67,7 @@ import com.logan.shieldmedia.plex.ui.PlexHomeScreen
 import com.logan.shieldmedia.plex.ui.PlexLibraryScreen
 import com.logan.shieldmedia.plex.ui.PlexShowcaseScreen
 import com.logan.shieldmedia.plex.ui.PlexVaultScreen
+import com.logan.shieldmedia.plex.ui.VaultMusicEffect
 import com.logan.shieldmedia.plex.ui.isPremiumLibrary
 import com.logan.shieldmedia.plex.ui.PlexSearchScreen
 import com.logan.shieldmedia.plex.ui.PlexProfilesScreen
@@ -246,6 +247,7 @@ private fun RootGraph(container: AppContainer, rootNav: androidx.navigation.NavH
         }
         composable(VAULT_ITEM_ROUTE, arguments = listOf(navArgument("ratingKey") { type = NavType.StringType })) { entry ->
             val ratingKey = entry.arguments?.getString("ratingKey").orEmpty()
+            VaultMusicEffect() // still in the vault: keep the music going
             PlexGate(container.plexSession, container.plexLibrary, onSignIn = { rootNav.navigate(PLEX_SIGN_IN_ROUTE) }) { env ->
                 PlexDetailsScreen(
                     env,

@@ -167,9 +167,9 @@ fun PlexShowcaseScreen(env: PlexEnv, sectionKey: String, title: String, onOpen: 
                             Spacer(Modifier.height(30.dp))
                             Hints()
                         }
-                        Deck(env, items, vm.index, Modifier.fillMaxHeight().width(600.dp))
+                        Deck(env, items, vm.index, Modifier.fillMaxHeight().width(420.dp))
                     }
-                    TickBar(vm.index, items.size)
+                    TickBar(vm.index, items.size, items.getOrNull(vm.index + 1)?.title)
                 }
             }
         }
@@ -338,68 +338,39 @@ private fun GlowBadge(text: String) {
 }
 
 /**
- * The current poster up front, the next two stacked behind it, the previous one sliding away.
- * Each card animates to its slot, so flipping feels like dealing from a deck.
+ * Just the current poster, so the artwork behind stays clear. Flipping cross-fades and slides
+ * the poster in the direction of travel.
  */
 @Composable
 private fun Deck(env: PlexEnv, items: List<PlexItem>, index: Int, modifier: Modifier) {
-    Box(modifier.padding(top = 10.dp, bottom = 10.dp), contentAlignment = Alignment.CenterStart) {
-        // Back-to-front so the current card is drawn on top.
-        val visible = (index - 1..index + 2).filter { it in items.indices }.sortedByDescending { it - index }
-        visible.forEach { i ->
-            val item = items[i]
-            key(item.ratingKey) {
-                val slot = i - index
-                val x by animateFloatAsState(if (slot < 0) -160f else slot * 150f, tween(480, easing = Motion.EaseOut), label = "x")
-                val scale by animateFloatAsState(if (slot <= 0) 1f else 1f - 0.14f * slot, tween(480, easing = Motion.EaseOut), label = "s")
-                val alpha by animateFloatAsState(
-                    when {
-                        slot < 0 -> 0f
-                        slot == 0 -> 1f
-                        slot == 1 -> 0.42f
-                        else -> 0.18f
-                    },
-                    tween(400),
-                    label = "a",
-                )
-                val front = slot == 0
-                Column(
-                    Modifier
-                        .width(260.dp)
-                        .graphicsLayer {
-                            translationX = x.dp.toPx()
-                            scaleX = scale
-                            scaleY = scale
-                            this.alpha = alpha
-                            transformOrigin = TransformOrigin(0f, 0.5f)
-                        },
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(2f / 3f)
-                            // Soft icy halo under the front poster.
-                            .shadow(
-                                elevation = if (front) 36.dp else 8.dp,
-                                shape = RoundedCornerShape(12.dp),
-                                ambientColor = Ice,
-                                spotColor = Ice,
-                            )
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(1.5.dp, Ice.copy(alpha = if (front) 0.85f else 0f), RoundedCornerShape(12.dp)),
-                    ) {
-                        AsyncImage(env.poster(item), contentDescription = item.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                    }
-                    Reflection(env.poster(item), strong = front)
-                }
+    Box(modifier.padding(end = Spacing.ScreenH), contentAlignment = Alignment.CenterEnd) {
+        AnimatedContent(
+            targetState = index,
+            transitionSpec = {
+                val dx = if (targetState > initialState) 1 else -1
+                (fadeIn(tween(380, easing = Motion.EaseOut)) + slideInHorizontally(tween(420, easing = Motion.EaseOut)) { w -> dx * w / 5 }) togetherWith
+                    (fadeOut(tween(200)) + slideOutHorizontally(tween(300, easing = Motion.EaseOut)) { w -> -dx * w / 5 })
+            },
+            label = "poster",
+        ) { i ->
+            val item = items.getOrNull(i) ?: return@AnimatedContent
+            Box(
+                Modifier
+                    .width(250.dp)
+                    .aspectRatio(2f / 3f)
+                    .shadow(40.dp, RoundedCornerShape(12.dp), ambientColor = Ice, spotColor = Ice)
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(1.dp, Ice.copy(alpha = 0.6f), RoundedCornerShape(12.dp)),
+            ) {
+                AsyncImage(env.poster(item), contentDescription = item.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             }
         }
     }
 }
 
-/** A slim row of ticks: where you are in the collection, at a glance. */
+/** A slim row of ticks showing position, and what's next on the right. */
 @Composable
-private fun TickBar(index: Int, count: Int) {
+private fun TickBar(index: Int, count: Int, nextTitle: String?) {
     Row(
         Modifier.fillMaxWidth().padding(start = Spacing.ScreenH, end = Spacing.ScreenH, bottom = 30.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -414,6 +385,12 @@ private fun TickBar(index: Int, count: Int) {
                     .height(3.dp)
                     .background(if (active) Ice else Color.White.copy(alpha = 0.22f), RoundedCornerShape(2.dp)),
             )
+        }
+        Spacer(Modifier.weight(1f))
+        if (nextTitle != null) {
+            Text("NEXT", style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.3.em), color = ShieldColors.Accent)
+            Spacer(Modifier.width(8.dp))
+            Text(nextTitle, style = MaterialTheme.typography.labelLarge, color = Color.White.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -439,33 +416,5 @@ private fun Hints() {
                 Text(label, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.2.em), color = ShieldColors.OnSurfaceMuted)
             }
         }
-    }
-}
-
-/** A faded mirror image under the poster, like a glossy floor. */
-@Composable
-private fun Reflection(url: String?, strong: Boolean) {
-    Box(
-        Modifier
-            .padding(top = 14.dp)
-            .fillMaxWidth()
-            .height(70.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .graphicsLayer {
-                alpha = if (strong) 0.3f else 0.1f
-                compositingStrategy = CompositingStrategy.Offscreen
-            }
-            .drawWithContent {
-                drawContent()
-                drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Transparent)), blendMode = BlendMode.DstIn)
-            },
-    ) {
-        AsyncImage(
-            model = url,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.BottomCenter,
-            modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f).graphicsLayer { scaleY = -1f },
-        )
     }
 }

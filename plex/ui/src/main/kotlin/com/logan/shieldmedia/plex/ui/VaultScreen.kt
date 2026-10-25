@@ -109,6 +109,7 @@ fun PlexVaultScreen(
     val blackout = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val collectionFocus = remember { FocusRequester() }
+    if (!leaving) VaultMusicEffect()
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (phase == PHASE_COLLECTION) {
