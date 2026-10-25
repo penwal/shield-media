@@ -158,6 +158,8 @@ fun PlexShowcaseScreen(env: PlexEnv, sectionKey: String, title: String, onOpen: 
 
     Box(Modifier.fillMaxSize()) {
         Backdrop(env.backdrop(current))
+        // The trailer plays silently over the artwork; the same scrims sit on top of it.
+        TrailerBackdrop(env, current)
         TechOverlay()
 
         when {

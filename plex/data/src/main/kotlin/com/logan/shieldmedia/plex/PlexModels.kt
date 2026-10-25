@@ -106,6 +106,7 @@ data class PlexItem(
     val ratingKey: String = "",
     val key: String = "",
     val type: String = "",
+    val subtype: String? = null,
     val title: String = "",
     val originalTitle: String? = null,
     val summary: String? = null,

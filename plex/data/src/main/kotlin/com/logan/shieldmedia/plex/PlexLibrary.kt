@@ -49,6 +49,10 @@ class PlexLibrary(private val session: PlexSession) {
         return server.container("/library/sections/$sectionKey/all", *query.toTypedArray())
     }
 
+    /** Trailers, featurettes, etc. attached to a title. */
+    suspend fun extras(server: ActiveServer, ratingKey: String): List<PlexItem> =
+        server.container("/library/metadata/$ratingKey/extras").metadata
+
     /** Genres present in a library, for filtering. */
     suspend fun genres(server: ActiveServer, sectionKey: String): List<LibrarySection> =
         server.container("/library/sections/$sectionKey/genre").directories

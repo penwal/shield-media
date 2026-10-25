@@ -1,0 +1,105 @@
+package com.logan.shieldmedia.plex.ui
+
+import android.view.TextureView
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
+import androidx.media3.exoplayer.ExoPlayer
+import com.logan.shieldmedia.plex.PlexItem
+import kotlinx.coroutines.delay
+
+private const val SETTLE_MS = 1_200L
+private const val BAR_ZOOM = 1.28f
+
+/**
+ * Plays the focused title's trailer silently behind the showcase, filling the screen (cropped,
+ * never stretched). It fades in over the static artwork once the first frame is ready and
+ * fades out before switching titles, so flicking through titles never shows a black flash.
+ */
+@Composable
+fun TrailerBackdrop(env: PlexEnv, item: PlexItem?, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val player = remember {
+        ExoPlayer.Builder(context).build().apply {
+            volume = 0f
+            repeatMode = Player.REPEAT_MODE_ONE
+        }
+    }
+    val alpha = remember { Animatable(0f) }
+    var aspect by remember { mutableFloatStateOf(16f / 9f) }
+
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(size: VideoSize) {
+                if (size.width > 0 && size.height > 0) aspect = size.width * size.pixelWidthHeightRatio / size.height
+            }
+        }
+        player.addListener(listener)
+        onDispose {
+            player.removeListener(listener)
+            player.release()
+        }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, e ->
+            when (e) {
+                Lifecycle.Event.ON_STOP -> player.pause()
+                Lifecycle.Event.ON_START -> if (player.mediaItemCount > 0) player.play()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(item?.ratingKey) {
+        alpha.animateTo(0f, tween(350))
+        player.stop()
+        player.clearMediaItems()
+        val key = item?.ratingKey ?: return@LaunchedEffect
+        delay(SETTLE_MS) // only once you stop on a title
+        val url = runCatching { env.trailerUrl(key) }.getOrNull() ?: return@LaunchedEffect
+        player.setMediaItem(MediaItem.fromUri(url))
+        player.prepare()
+        player.play()
+        // Wait for real frames before revealing.
+        while (!(player.isPlaying && player.currentPosition > 300)) delay(100)
+        alpha.animateTo(1f, tween(1200))
+    }
+
+    BoxWithConstraints(modifier.fillMaxSize().graphicsLayer { this.alpha = alpha.value }, contentAlignment = Alignment.Center) {
+        val screen = maxWidth / maxHeight
+        // Fill: crop the video to cover the screen.
+        val size = if (aspect > screen) Modifier.requiredSize(maxHeight * aspect, maxHeight) else Modifier.requiredSize(maxWidth, maxWidth / aspect)
+        // Trailers for scope films often have black bars baked into a 16:9 frame; zoom past them.
+        Box(size.graphicsLayer { scaleX = BAR_ZOOM; scaleY = BAR_ZOOM }) {
+            AndroidView(
+                factory = { ctx -> TextureView(ctx).also { player.setVideoTextureView(it) } },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}

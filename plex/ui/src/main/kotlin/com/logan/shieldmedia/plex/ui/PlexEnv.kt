@@ -25,6 +25,13 @@ class PlexEnv(val library: PlexLibrary, val server: ActiveServer) {
     fun logo(item: PlexItem): String? = library.imageUrl(server, item.clearLogo, 900, 360)
     fun person(path: String?): String? = library.imageUrl(server, path, 200, 200)
 
+    /** Direct-play URL of the title's main trailer, or null if it has none. */
+    suspend fun trailerUrl(ratingKey: String): String? {
+        val trailer = library.extras(server, ratingKey).firstOrNull { it.subtype == "trailer" } ?: return null
+        val part = trailer.media.firstOrNull()?.parts?.firstOrNull() ?: return null
+        return library.directPlayUrl(server, part)
+    }
+
     fun play(item: PlexItem, fromStart: Boolean, onPlay: PlexPlayHandler): Boolean {
         if (item.type !in setOf("movie", "episode")) return false
         onPlay(item.ratingKey, fromStart)
