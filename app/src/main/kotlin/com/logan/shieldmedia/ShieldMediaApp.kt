@@ -9,6 +9,7 @@ import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
+import com.logan.shieldmedia.iptv.IptvRepository
 import com.logan.shieldmedia.plex.PlexLibrary
 import com.logan.shieldmedia.plex.PlexSession
 import com.logan.shieldmedia.settings.SettingsRepository
@@ -28,6 +29,7 @@ class AppContainer(app: Application) {
     val settings = SettingsRepository(app)
     val plexSession = PlexSession(app, okHttp)
     val plexLibrary = PlexLibrary(plexSession)
+    val iptv = IptvRepository(app, okHttp)
 }
 
 class ShieldMediaApp : Application(), SingletonImageLoader.Factory {
@@ -39,6 +41,8 @@ class ShieldMediaApp : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         container = AppContainer(this)
         appScope.launch { container.plexSession.start() }
+        // Channels refresh every 12 h and the guide every 8 h; this is a no-op when both are fresh.
+        appScope.launch { container.iptv.syncAllIfStale() }
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =

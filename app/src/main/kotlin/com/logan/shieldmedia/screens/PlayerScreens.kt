@@ -29,9 +29,39 @@ import androidx.tv.material3.Text
 import com.logan.shieldmedia.designsystem.ScreenTitle
 import com.logan.shieldmedia.navigation.PlayHandler
 import com.logan.shieldmedia.player.PlaybackConfig
+import com.logan.shieldmedia.iptv.ChannelFilter
+import com.logan.shieldmedia.iptv.DEFAULT_USER_AGENT
+import com.logan.shieldmedia.iptv.IptvRepository
+import com.logan.shieldmedia.iptv.ui.LivePlayerScreen
 import com.logan.shieldmedia.player.PlayerScreen
 import com.logan.shieldmedia.settings.SettingsRepository
 import kotlinx.coroutines.flow.first
+
+/** Live TV: same saved player settings, handed to the zapping player. */
+@Composable
+fun LiveRoute(
+    repo: IptvRepository,
+    settingsRepository: SettingsRepository,
+    playlistId: Long,
+    filter: ChannelFilter,
+    channelId: Long,
+    onExit: () -> Unit,
+) {
+    val config by produceState<PlaybackConfig?>(initialValue = null) {
+        val s = settingsRepository.playerSettings.first()
+        value = PlaybackConfig(
+            audioPassthrough = s.audioPassthrough,
+            showStats = s.showStatsOverlay,
+            userAgent = repo.userAgent(playlistId) ?: DEFAULT_USER_AGENT,
+        )
+    }
+    val loaded = config
+    if (loaded == null) {
+        Box(Modifier.fillMaxSize().background(Color.Black))
+    } else {
+        LivePlayerScreen(repo, playlistId, filter, channelId, loaded, onExit)
+    }
+}
 
 /** Loads the saved player settings once, then hands off to the full-screen player. */
 @Composable

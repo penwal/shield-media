@@ -64,7 +64,13 @@ import com.logan.shieldmedia.plex.ui.PlexLibraryScreen
 import com.logan.shieldmedia.plex.ui.PlexSearchScreen
 import com.logan.shieldmedia.plex.ui.PlexSignInScreen
 import com.logan.shieldmedia.screens.PlaceholderScreen
+import com.logan.shieldmedia.screens.LiveRoute
 import com.logan.shieldmedia.screens.PlayerRoute
+import com.logan.shieldmedia.iptv.ChannelFilter
+import com.logan.shieldmedia.iptv.ui.AddIptvSourceScreen
+import com.logan.shieldmedia.iptv.ui.IptvSourcesScreen
+import com.logan.shieldmedia.iptv.ui.LiveGuideScreen
+import com.logan.shieldmedia.iptv.ui.LivePlayHandler
 import com.logan.shieldmedia.screens.PlayerTestScreen
 import com.logan.shieldmedia.screens.SettingsScreen
 import kotlinx.coroutines.delay
@@ -75,6 +81,9 @@ private const val PLAYER_ROUTE = "player?uri={uri}&title={title}&start={start}"
 private const val PLEX_SIGN_IN_ROUTE = "plex_sign_in"
 private const val PLAYER_TEST_ROUTE = "player_test"
 private const val PLEX_ITEM_ROUTE = "plex/item/{ratingKey}"
+private const val IPTV_SOURCES_ROUTE = "iptv/sources"
+private const val IPTV_ADD_ROUTE = "iptv/add"
+private const val LIVE_ROUTE = "live?playlist={playlist}&filter={filter}&channel={channel}"
 
 /** Width of the collapsed navigation rail; content starts to its right. */
 private val RailWidth = 80.dp
@@ -98,6 +107,26 @@ fun AppNavigation(container: AppContainer) {
                     rootNav.navigate("player?uri=${Uri.encode(uri)}&title=${Uri.encode(title)}&start=$startMs")
                 },
                 onPlexSignIn = { rootNav.navigate(PLEX_SIGN_IN_ROUTE) },
+                onPlayLive = { channel, filter ->
+                    rootNav.navigate("live?playlist=${channel.playlistId}&filter=${Uri.encode(filter.key)}&channel=${channel.id}")
+                },
+            )
+        }
+        composable(
+            LIVE_ROUTE,
+            arguments = listOf(
+                navArgument("playlist") { type = NavType.LongType },
+                navArgument("filter") { type = NavType.StringType; defaultValue = "all" },
+                navArgument("channel") { type = NavType.LongType },
+            ),
+        ) { entry ->
+            LiveRoute(
+                repo = container.iptv,
+                settingsRepository = container.settings,
+                playlistId = entry.arguments?.getLong("playlist") ?: 0L,
+                filter = ChannelFilter.fromKey(entry.arguments?.getString("filter")),
+                channelId = entry.arguments?.getLong("channel") ?: 0L,
+                onExit = { rootNav.popBackStack() },
             )
         }
         composable(
@@ -128,7 +157,12 @@ fun AppNavigation(container: AppContainer) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun MainScaffold(container: AppContainer, onPlay: PlayHandler, onPlexSignIn: () -> Unit) {
+private fun MainScaffold(
+    container: AppContainer,
+    onPlay: PlayHandler,
+    onPlexSignIn: () -> Unit,
+    onPlayLive: LivePlayHandler,
+) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
@@ -263,7 +297,15 @@ private fun MainScaffold(container: AppContainer, onPlay: PlayHandler, onPlexSig
                     composable(Destination.Shows.route) {
                         plex { env -> PlexLibraryScreen(env, sectionType = "show", title = "TV Shows", onOpen = openItem) }
                     }
-                    composable(Destination.LiveTv.route) { PlaceholderScreen("Live TV", "IPTV channels and guide") }
+                    composable(Destination.LiveTv.route) {
+                        LiveGuideScreen(container.iptv, onPlay = onPlayLive, onAddSource = { navController.navigate(IPTV_ADD_ROUTE) })
+                    }
+                    composable(IPTV_SOURCES_ROUTE) {
+                        IptvSourcesScreen(container.iptv, onAdd = { navController.navigate(IPTV_ADD_ROUTE) })
+                    }
+                    composable(IPTV_ADD_ROUTE) {
+                        AddIptvSourceScreen(container.iptv, onDone = { navController.popBackStack() })
+                    }
                     composable(Destination.IptvVod.route) { PlaceholderScreen("IPTV VOD", "Xtream movies and series") }
                     composable(Destination.Search.route) {
                         plex { env -> PlexSearchScreen(env, onOpen = openItem) }
@@ -273,6 +315,7 @@ private fun MainScaffold(container: AppContainer, onPlay: PlayHandler, onPlexSig
                             repository = container.settings,
                             plexSession = container.plexSession,
                             onPlexSignIn = onPlexSignIn,
+                            onOpenIptvSources = { navController.navigate(IPTV_SOURCES_ROUTE) },
                             onOpenPlayerTest = { navController.navigate(PLAYER_TEST_ROUTE) },
                         )
                     }

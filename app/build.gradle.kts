@@ -33,6 +33,8 @@ dependencies {
     implementation(project(":core:player"))
     implementation(project(":plex:data"))
     implementation(project(":plex:ui"))
+    implementation(project(":iptv:data"))
+    implementation(project(":iptv:ui"))
 
     val bom = platform(libs.androidx.compose.bom)
     implementation(bom)

@@ -107,11 +107,6 @@ private enum class SubtitleSize(val label: String, val scale: Float) {
     Small("Small", 0.85f), Normal("Normal", 1.15f), Large("Large", 1.45f)
 }
 
-/** One row in a side panel: a section heading or a selectable option. */
-private sealed interface PanelRow {
-    data class Header(val text: String) : PanelRow
-    data class Option(val title: String, val detail: String?, val selected: Boolean, val onClick: () -> Unit) : PanelRow
-}
 
 private const val OSD_TIMEOUT_MS = 5_000L
 
@@ -127,7 +122,9 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
-    val player = remember { PlayerFactory.create(context, config) }
+    val audioDelay = remember { AudioDelay() }
+    var audioDelayMs by remember { mutableIntStateOf(0) }
+    val player = remember { PlayerFactory.create(context, config, audioDelay = audioDelay) }
     val stats = remember { StatsTracker() }
     val frameRateMatcher = remember(activity) { FrameRateMatcher(activity) }
     val scope = rememberCoroutineScope()
@@ -413,6 +410,15 @@ fun PlayerScreen(
                     add(PanelRow.Header("Quality"))
                     // Always the untouched original file; transcoding is only ever a fallback.
                     add(PanelRow.Option("Original", sourceLabel ?: "Plays the stream as-is", true) {})
+                    add(PanelRow.Header("Audio delay"))
+                    AudioDelay.STEPS.forEach { ms ->
+                        add(
+                            PanelRow.Option(if (ms == 0) "Off" else "%+d ms".format(ms), null, audioDelayMs == ms) {
+                                audioDelayMs = ms
+                                audioDelay.millis = ms
+                            },
+                        )
+                    }
                     add(PanelRow.Header("Zoom"))
                     Zoom.entries.forEach { z -> add(PanelRow.Option(z.label, null, zoom == z) { zoom = z }) }
                     add(PanelRow.Header("Subtitle size"))
@@ -587,64 +593,6 @@ private fun SeekBar(
         drawRoundRect(ShieldColors.Accent, Offset(0f, top), Size(size.width * played, barHeight), radius)
         if (focused) {
             drawCircle(Color.White, radius = 9.dp.toPx(), center = Offset(size.width * played, size.height / 2))
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun OptionsPanel(title: String, rows: List<PanelRow>, emptyText: String) {
-    val firstFocus = remember { FocusRequester() }
-    val options = rows.filterIsInstance<PanelRow.Option>()
-    val focusTarget = options.firstOrNull { it.selected } ?: options.firstOrNull()
-    LaunchedEffect(title) {
-        withFrameNanos { }
-        runCatching { firstFocus.requestFocus() }
-    }
-
-    Column(
-        Modifier
-            .fillMaxHeight()
-            .width(440.dp)
-            .background(ShieldColors.Surface.copy(alpha = 0.96f))
-            .padding(vertical = 40.dp, horizontal = 20.dp)
-            // Modal: D-pad must not wander into the OSD behind the panel. Back closes it.
-            .focusProperties { onExit = { cancelFocusChange() } }
-            .focusGroup(),
-    ) {
-        Text(
-            title,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = ShieldColors.OnSurface,
-            modifier = Modifier.padding(start = 12.dp, bottom = 16.dp),
-        )
-        if (options.isEmpty()) {
-            Text(emptyText, color = ShieldColors.OnSurfaceMuted, modifier = Modifier.padding(12.dp))
-        }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            itemsIndexed(rows) { _, row ->
-                when (row) {
-                    is PanelRow.Header -> Text(
-                        row.text.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ShieldColors.OnSurfaceFaint,
-                        modifier = Modifier.padding(start = 12.dp, top = 16.dp, bottom = 4.dp),
-                    )
-                    is PanelRow.Option -> ListItem(
-                        selected = row.selected,
-                        onClick = row.onClick,
-                        headlineContent = { Text(row.title) },
-                        supportingContent = row.detail?.let { { Text(it) } },
-                        trailingContent = if (row.selected) {
-                            { ShieldIcon(ShieldIcons.Check, contentDescription = "Selected", size = 20.dp) }
-                        } else {
-                            null
-                        },
-                        modifier = if (row == focusTarget) Modifier.focusRequester(firstFocus) else Modifier,
-                    )
-                }
-            }
         }
     }
 }

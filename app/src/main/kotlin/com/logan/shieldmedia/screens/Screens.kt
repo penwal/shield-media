@@ -41,6 +41,7 @@ fun SettingsScreen(
     repository: SettingsRepository,
     plexSession: PlexSession,
     onPlexSignIn: () -> Unit,
+    onOpenIptvSources: () -> Unit,
     onOpenPlayerTest: () -> Unit,
 ) {
     val settings by repository.playerSettings.collectAsState(initial = PlayerSettings())
@@ -93,7 +94,25 @@ fun SettingsScreen(
                 }
             }
 
+            item { SectionLabel("Live TV") }
+            item {
+                ListItem(
+                    selected = false,
+                    onClick = onOpenIptvSources,
+                    headlineContent = { Text("Live TV sources") },
+                    supportingContent = { Text("Xtream Codes accounts and M3U playlists") },
+                )
+            }
+
             item { SectionLabel("Playback") }
+            item {
+                ListItem(
+                    selected = true,
+                    onClick = {},
+                    headlineContent = { Text("Plex quality: Original") },
+                    supportingContent = { Text("Always direct play the original file. Transcoding is only a last resort.") },
+                )
+            }
             item {
                 SettingRow("Match display frame rate", settings.autoFrameRate) {
                     scope.launch { repository.setAutoFrameRate(it) }

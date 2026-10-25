@@ -5,6 +5,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioCapabilities
@@ -23,10 +24,16 @@ data class PlaybackConfig(
 
 object PlayerFactory {
 
-    fun create(context: Context, config: PlaybackConfig): ExoPlayer {
+    /** [live]: small start buffer so channel changes are fast (TiviMate-style zapping). */
+    fun create(
+        context: Context,
+        config: PlaybackConfig,
+        live: Boolean = false,
+        audioDelay: AudioDelay = AudioDelay(),
+    ): ExoPlayer {
         // Platform (hardware) decoders first; FFmpeg only for formats the Shield can't decode itself
         // (TrueHD, DTS, DTS-HD when passthrough is off).
-        val renderers = ShieldRenderersFactory(context, config.audioPassthrough)
+        val renderers = ShieldRenderersFactory(context, config.audioPassthrough, audioDelay)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
 
@@ -44,6 +51,15 @@ object PlayerFactory {
 
         return ExoPlayer.Builder(context, renderers)
             .setTrackSelector(trackSelector)
+            .apply {
+                if (live) {
+                    setLoadControl(
+                        DefaultLoadControl.Builder()
+                            .setBufferDurationsMs(15_000, 50_000, 1_000, 2_500)
+                            .build(),
+                    )
+                }
+            }
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(context, http)))
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -72,6 +88,7 @@ object PlayerFactory {
 private class ShieldRenderersFactory(
     context: Context,
     private val passthrough: Boolean,
+    private val audioDelay: AudioDelay,
 ) : DefaultRenderersFactory(context) {
 
     override fun buildAudioSink(
@@ -85,6 +102,6 @@ private class ShieldRenderersFactory(
             @Suppress("DEPRECATION")
             builder.setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
         }
-        return builder.build()
+        return DelayedAudioSink(builder.build(), audioDelay)
     }
 }
