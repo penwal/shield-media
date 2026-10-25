@@ -67,6 +67,7 @@ import com.logan.shieldmedia.designsystem.PrimaryButton
 import com.logan.shieldmedia.designsystem.SecondaryButton
 import com.logan.shieldmedia.designsystem.ShieldColors
 import com.logan.shieldmedia.plex.PlexItem
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.cos
@@ -77,6 +78,7 @@ private val IceDeep = Color(0xFF5FA8FF)
 
 private const val PHASE_INTRO = 0
 private const val PHASE_COLLECTION = 1
+private const val EXIT_FADE_MS = 2000
 
 private val STATUS = listOf(
     "MOUNTING ARCHIVE",
@@ -147,8 +149,11 @@ fun PlexVaultScreen(
                 onLeave = {
                     confirm = false
                     leaving = true
+                    // Picture and music fade out together, slowly, before returning to the app.
+                    VaultMusic.fadeOut(EXIT_FADE_MS.toLong())
                     scope.launch {
-                        blackout.animateTo(1f, tween(380))
+                        blackout.animateTo(1f, tween(EXIT_FADE_MS, easing = CubicBezierEasing(0.45f, 0f, 0.55f, 1f)))
+                        delay(250) // a beat of black and silence
                         onExit()
                     }
                 },

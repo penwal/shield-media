@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 object VaultMusic {
     private const val RESOURCE = "vault_theme"
     private const val VOLUME = 0.55f
-    private const val FADE_STEPS = 20
+    private const val FADE_STEPS = 40
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var player: MediaPlayer? = null
@@ -54,8 +54,13 @@ object VaultMusic {
         fadeJob = scope.launch {
             delay(400)
             if (holders > 0) return@launch
-            fadeTo(0f, durationMs = 700, then = ::stop)
+            fadeTo(0f, durationMs = 1500, then = ::stop)
         }
+    }
+
+    /** Fades to silence now (e.g. while the screen fades out); the player stops once released. */
+    fun fadeOut(durationMs: Long) {
+        fadeTo(0f, durationMs)
     }
 
     fun pause() {
