@@ -93,6 +93,7 @@ fun PlexPlayerRoute(
     fromStart: Boolean,
     config: PlaybackConfig,
     onExit: () -> Unit,
+    theater: Boolean = false,
 ) {
     var currentKey by remember { mutableStateOf(ratingKey) }
     var startFromBeginning by remember { mutableStateOf(fromStart) }
@@ -125,6 +126,7 @@ fun PlexPlayerRoute(
                         startPositionMs = if (startFromBeginning) 0L else plexItem.viewOffset ?: 0L,
                         sourceLabel = "Direct Play · Original",
                         session = session,
+                        theater = theater,
                     )
                 }
             }

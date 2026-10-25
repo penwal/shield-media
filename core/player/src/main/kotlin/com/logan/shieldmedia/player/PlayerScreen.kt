@@ -127,6 +127,8 @@ fun PlayerScreen(
     sourceLabel: String? = null,
     /** Progress reporting, skip markers, Up Next and fallback for library content (Plex). */
     session: PlaybackSession? = null,
+    /** Start with the controls hidden, like a cinema; any key brings them up. */
+    theater: Boolean = false,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -149,7 +151,7 @@ fun PlayerScreen(
     var duration by remember { mutableLongStateOf(0L) }
     var buffered by remember { mutableLongStateOf(0L) }
 
-    var osdVisible by remember { mutableStateOf(true) }
+    var osdVisible by remember { mutableStateOf(!theater) }
     var osdFocus by remember { mutableStateOf(OsdFocus.PlayPause) }
     var lastInteraction by remember { mutableLongStateOf(0L) }
     var panel by remember { mutableStateOf<TrackPanel?>(null) }

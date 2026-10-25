@@ -66,6 +66,7 @@ import com.logan.shieldmedia.plex.ui.PlexGate
 import com.logan.shieldmedia.plex.ui.PlexHomeScreen
 import com.logan.shieldmedia.plex.ui.PlexLibraryScreen
 import com.logan.shieldmedia.plex.ui.PlexShowcaseScreen
+import com.logan.shieldmedia.plex.ui.FeatureIntroScreen
 import com.logan.shieldmedia.plex.ui.PlexVaultScreen
 import com.logan.shieldmedia.plex.ui.VaultMusicEffect
 import com.logan.shieldmedia.plex.ui.isPremiumLibrary
@@ -98,7 +99,8 @@ private const val PLEX_SIGN_IN_ROUTE = "plex_sign_in"
 private const val PLEX_PROFILES_ROUTE = "plex_profiles"
 private const val VAULT_ROUTE = "vault/{key}?title={title}"
 private const val VAULT_ITEM_ROUTE = "vault_item/{ratingKey}"
-private const val PLEX_PLAY_ROUTE = "plex_play/{ratingKey}?fromStart={fromStart}"
+private const val PLEX_PLAY_ROUTE = "plex_play/{ratingKey}?fromStart={fromStart}&theater={theater}"
+private const val FEATURE_ROUTE = "feature/{ratingKey}?fromStart={fromStart}"
 private const val PLAYER_TEST_ROUTE = "player_test"
 private const val PLEX_ITEM_ROUTE = "plex/item/{ratingKey}"
 private const val LIBRARY_ROUTE = "library/{key}?title={title}"
@@ -214,6 +216,7 @@ private fun RootGraph(container: AppContainer, rootNav: androidx.navigation.NavH
             arguments = listOf(
                 navArgument("ratingKey") { type = NavType.StringType },
                 navArgument("fromStart") { type = NavType.BoolType; defaultValue = false },
+                navArgument("theater") { type = NavType.BoolType; defaultValue = false },
             ),
         ) { entry ->
             PlexPlayRoute(
@@ -221,7 +224,33 @@ private fun RootGraph(container: AppContainer, rootNav: androidx.navigation.NavH
                 ratingKey = entry.arguments?.getString("ratingKey").orEmpty(),
                 fromStart = entry.arguments?.getBoolean("fromStart") ?: false,
                 onExit = { rootNav.popBackStack() },
+                theater = entry.arguments?.getBoolean("theater") ?: false,
             )
+        }
+        // Blu-Ray pre-show: narration, then the film in theater mode (it replaces this screen).
+        composable(
+            FEATURE_ROUTE,
+            arguments = listOf(
+                navArgument("ratingKey") { type = NavType.StringType },
+                navArgument("fromStart") { type = NavType.BoolType; defaultValue = false },
+            ),
+            enterTransition = { fadeIn(tween(700)) },
+            exitTransition = { fadeOut(tween(300)) },
+        ) { entry ->
+            val ratingKey = entry.arguments?.getString("ratingKey").orEmpty()
+            val fromStart = entry.arguments?.getBoolean("fromStart") ?: false
+            PlexGate(container.plexSession, container.plexLibrary, onSignIn = { rootNav.navigate(PLEX_SIGN_IN_ROUTE) }) { env ->
+                FeatureIntroScreen(
+                    env = env,
+                    ratingKey = ratingKey,
+                    onStart = {
+                        rootNav.navigate("plex_play/$ratingKey?fromStart=$fromStart&theater=true") {
+                            popUpTo(FEATURE_ROUTE) { inclusive = true }
+                        }
+                    },
+                    onCancel = { rootNav.popBackStack() },
+                )
+            }
         }
         // Premium libraries (Blu-Ray) run full screen, outside the menu, with their own intro.
         composable(
@@ -253,7 +282,7 @@ private fun RootGraph(container: AppContainer, rootNav: androidx.navigation.NavH
                     env,
                     ratingKey,
                     onOpen = { rootNav.navigate("vault_item/${it.ratingKey}") },
-                    onPlay = { key, fromStart -> rootNav.navigate("plex_play/$key?fromStart=$fromStart") },
+                    onPlay = { key, fromStart -> rootNav.navigate("feature/$key?fromStart=$fromStart") },
                 )
             }
         }

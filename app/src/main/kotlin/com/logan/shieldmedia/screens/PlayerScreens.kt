@@ -47,7 +47,7 @@ import kotlinx.coroutines.flow.first
 
 /** Plex playback: needs a connected server, then hands off to the Plex-aware player. */
 @Composable
-fun PlexPlayRoute(container: AppContainer, ratingKey: String, fromStart: Boolean, onExit: () -> Unit) {
+fun PlexPlayRoute(container: AppContainer, ratingKey: String, fromStart: Boolean, onExit: () -> Unit, theater: Boolean = false) {
     val plexState by container.plexSession.state.collectAsState()
     val config by produceState<PlaybackConfig?>(initialValue = null) {
         val s = container.settings.playerSettings.first()
@@ -63,7 +63,7 @@ fun PlexPlayRoute(container: AppContainer, ratingKey: String, fromStart: Boolean
         Box(Modifier.fillMaxSize().background(Color.Black))
     } else {
         val env = remember(server) { PlexEnv(container.plexLibrary, server) }
-        PlexPlayerRoute(env, ratingKey, fromStart, loaded, onExit)
+        PlexPlayerRoute(env, ratingKey, fromStart, loaded, onExit, theater)
     }
 }
 
