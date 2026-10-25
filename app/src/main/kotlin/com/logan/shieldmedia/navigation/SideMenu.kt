@@ -113,7 +113,6 @@ fun NavigationDrawerScope.SideMenu(
 
         Section(open, "Live TV")
         MenuItem(Destination.LiveTv.asEntry(), currentSection, currentFocus, onSelect)
-        MenuItem(Destination.IptvVod.asEntry(), currentSection, currentFocus, onSelect)
 
         Spacer(Modifier.weight(1f))
         Section(open, "Account")

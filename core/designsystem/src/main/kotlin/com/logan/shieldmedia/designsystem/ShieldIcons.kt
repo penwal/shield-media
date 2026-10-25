@@ -32,6 +32,7 @@ object ShieldIcons {
     @DrawableRes val Star = R.drawable.ic_star
     @DrawableRes val Heart = R.drawable.ic_heart
     @DrawableRes val Channels = R.drawable.ic_list_video
+    @DrawableRes val Disc = R.drawable.ic_disc_3
 }
 
 @Composable

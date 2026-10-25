@@ -65,6 +65,8 @@ import com.logan.shieldmedia.plex.ui.PlexDetailsScreen
 import com.logan.shieldmedia.plex.ui.PlexGate
 import com.logan.shieldmedia.plex.ui.PlexHomeScreen
 import com.logan.shieldmedia.plex.ui.PlexLibraryScreen
+import com.logan.shieldmedia.plex.ui.PlexShowcaseScreen
+import com.logan.shieldmedia.plex.ui.isPremiumLibrary
 import com.logan.shieldmedia.plex.ui.PlexSearchScreen
 import com.logan.shieldmedia.plex.ui.PlexProfilesScreen
 import com.logan.shieldmedia.plex.ui.PlexSignInScreen
@@ -290,14 +292,23 @@ private fun MainScaffold(
     val libraries by androidx.compose.runtime.produceState(emptyList<MenuEntry>(), plexState) {
         val server = (plexState as? com.logan.shieldmedia.plex.PlexState.Ready)?.server
         value = if (server == null) emptyList() else runCatching {
-            container.plexLibrary.sections(server).filter { it.type == "movie" || it.type == "show" }.map { s ->
-                MenuEntry(
-                    id = "library/${s.key}",
-                    label = s.title,
-                    icon = if (s.type == "show") com.logan.shieldmedia.designsystem.ShieldIcons.Shows else com.logan.shieldmedia.designsystem.ShieldIcons.Movies,
-                    target = "library/${s.key}?title=${Uri.encode(s.title)}",
-                )
-            }
+            // Order: regular movie libraries, then premium ones (Blu-Ray/4K), then TV.
+            container.plexLibrary.sections(server)
+                .filter { it.type == "movie" || it.type == "show" }
+                .sortedBy { s -> if (s.type == "show") 2 else if (isPremiumLibrary(s.title)) 1 else 0 }
+                .map { s ->
+                    val icons = com.logan.shieldmedia.designsystem.ShieldIcons
+                    MenuEntry(
+                        id = "library/${s.key}",
+                        label = s.title,
+                        icon = when {
+                            s.type == "show" -> icons.Shows
+                            isPremiumLibrary(s.title) -> icons.Disc
+                            else -> icons.Movies
+                        },
+                        target = "library/${s.key}?title=${Uri.encode(s.title)}",
+                    )
+                }
         }.getOrDefault(emptyList())
     }
 
@@ -371,7 +382,13 @@ private fun MainScaffold(
                     ) { entry ->
                         val key = entry.arguments?.getString("key").orEmpty()
                         val title = entry.arguments?.getString("title").orEmpty()
-                        plex { env -> PlexLibraryScreen(env, sectionKey = key, title = title, onOpen = openItem) }
+                        plex { env ->
+                            if (isPremiumLibrary(title)) {
+                                PlexShowcaseScreen(env, sectionKey = key, title = title, onOpen = openItem)
+                            } else {
+                                PlexLibraryScreen(env, sectionKey = key, title = title, onOpen = openItem)
+                            }
+                        }
                     }
                     composable(Destination.LiveTv.route) {
                         LiveGuideScreen(
