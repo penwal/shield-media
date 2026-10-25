@@ -61,6 +61,7 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.logan.shieldmedia.designsystem.MessageState
 import com.logan.shieldmedia.designsystem.Motion
+import com.logan.shieldmedia.designsystem.PinPad
 import com.logan.shieldmedia.designsystem.PrimaryButton
 import com.logan.shieldmedia.designsystem.ShieldColors
 import com.logan.shieldmedia.designsystem.ShieldIcon
@@ -118,6 +119,9 @@ private fun Guide(vm: GuideViewModel, channels: List<Channel>, onPlay: LivePlayH
     val chipFocus = remember { FocusRequester() }
     var gridFocused by remember { mutableStateOf(false) }
     var groupPanel by remember { mutableStateOf(false) }
+    var programMenu by remember { mutableStateOf(false) }
+    var pinPrompt by remember { mutableStateOf<PinPrompt?>(null) }
+    var pinError by remember { mutableStateOf<String?>(null) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var longPressHandled by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
@@ -168,9 +172,9 @@ private fun Guide(vm: GuideViewModel, channels: List<Channel>, onPlay: LivePlayH
                         val native = event.nativeKeyEvent
                         val isCenter = event.key == Key.DirectionCenter || event.key == Key.Enter
                         if (isCenter) {
-                            // Short press plays; holding toggles the channel as a favorite.
+                            // Short press plays; holding opens options for the programme and channel.
                             if (event.type == KeyEventType.KeyDown && native.repeatCount == 1) {
-                                vm.focusedChannel()?.let(vm::toggleFavorite)
+                                programMenu = true
                                 longPressHandled = true
                             }
                             if (event.type == KeyEventType.KeyUp) {
@@ -234,22 +238,124 @@ private fun Guide(vm: GuideViewModel, channels: List<Channel>, onPlay: LivePlayH
             modifier = Modifier.align(Alignment.CenterEnd),
         ) {
             val filters = listOf(ChannelFilter.All, ChannelFilter.Favorites) + vm.groups.map { ChannelFilter.Group(it) }
+            val locked = vm.lockedGroups
             OptionsPanel(
                 title = "Channel groups",
                 rows = filters.map { f ->
-                    PanelRow.Option(f.label, null, f == vm.filter) {
-                        vm.selectFilter(f)
-                        groupPanel = false
+                    val isLocked = f is ChannelFilter.Group && f.name in locked
+                    PanelRow.Option(
+                        title = f.label,
+                        detail = if (isLocked) "Locked" else null,
+                        selected = f == vm.filter,
+                        // Hold OK on a group to lock or unlock it (sets up a PIN the first time).
+                        onLongClick = (f as? ChannelFilter.Group)?.let { g ->
+                            {
+                                pinError = null
+                                groupPanel = false
+                                pinPrompt = if (!vm.hasParentalPin) PinPrompt.Create(g.name) else PinPrompt.ToggleLock(g.name)
+                            }
+                        },
+                    ) {
+                        if (isLocked && !vm.unlocked && vm.hasParentalPin) {
+                            pinError = null
+                            groupPanel = false
+                            pinPrompt = PinPrompt.Open(f)
+                        } else {
+                            vm.selectFilter(f)
+                            groupPanel = false
+                        }
                     }
                 },
                 emptyText = "No groups",
             )
         }
-        if (groupPanel) {
+        AnimatedVisibility(
+            visible = programMenu,
+            enter = slideInHorizontally(tween(250)) { it / 3 } + fadeIn(tween(200)),
+            exit = slideOutHorizontally(tween(200)) { it / 3 } + fadeOut(tween(150)),
+            modifier = Modifier.align(Alignment.CenterEnd),
+        ) {
+            val ch = vm.focusedChannel()
+            val program = vm.focusedProgram()?.takeIf { it.title.isNotEmpty() }
+            val rows = buildList {
+                if (ch != null) {
+                    add(PanelRow.Option("Watch ${ch.name}", "Live", false) {
+                        programMenu = false
+                        onPlay(ch, vm.filter)
+                    })
+                    val archive = vm.focusedCatchupUrl()
+                    if (archive != null && program != null) {
+                        add(PanelRow.Option("Watch from the start", program.title, false) {
+                            programMenu = false
+                            onPlayArchive(archive, "${ch.name}  ·  ${program.title}")
+                        })
+                    }
+                    if (program != null && program.start > now) {
+                        val has = vm.hasReminder(ch, program)
+                        add(PanelRow.Option(if (has) "Cancel reminder" else "Remind me", program.title, has) {
+                            vm.toggleReminder(ch, program)
+                            programMenu = false
+                        })
+                    }
+                    add(PanelRow.Option(if (ch.favorite) "Remove from favorites" else "Add to favorites", ch.name, ch.favorite) {
+                        vm.toggleFavorite(ch)
+                        programMenu = false
+                    })
+                }
+            }
+            OptionsPanel(title = program?.title ?: ch?.name ?: "Options", rows = rows, emptyText = "Nothing to do here")
+        }
+
+        pinPrompt?.let { prompt ->
+            Box(Modifier.fillMaxSize().background(ShieldColors.Background.copy(alpha = 0.97f)), contentAlignment = Alignment.Center) {
+                PinPad(
+                    title = when (prompt) {
+                        is PinPrompt.Create -> "Choose a 4-digit parental PIN"
+                        is PinPrompt.ToggleLock -> if (prompt.group in vm.lockedGroups) "PIN to unlock ${prompt.group}" else "PIN to lock ${prompt.group}"
+                        is PinPrompt.Open -> "PIN for ${prompt.filter.label}"
+                    },
+                    error = pinError,
+                    busy = false,
+                    onSubmit = { pin ->
+                        when (prompt) {
+                            is PinPrompt.Create -> {
+                                vm.setParentalPin(pin)
+                                vm.setGroupLocked(prompt.group, true)
+                                pinPrompt = null
+                                groupPanel = true
+                            }
+                            is PinPrompt.ToggleLock -> if (vm.checkPin(pin)) {
+                                vm.setGroupLocked(prompt.group, prompt.group !in vm.lockedGroups)
+                                pinPrompt = null
+                                groupPanel = true
+                            } else {
+                                pinError = "Wrong PIN"
+                            }
+                            is PinPrompt.Open -> if (vm.unlock(pin)) {
+                                pinPrompt = null
+                                groupPanel = false
+                                vm.selectFilter(prompt.filter)
+                            } else {
+                                pinError = "Wrong PIN"
+                            }
+                        }
+                    },
+                    onCancel = {
+                        pinPrompt = null
+                        groupPanel = true
+                    },
+                )
+            }
+        }
+
+        if (groupPanel && pinPrompt == null) {
             androidx.activity.compose.BackHandler { groupPanel = false }
         }
-        LaunchedEffect(groupPanel) {
-            if (!groupPanel) {
+        if (programMenu) {
+            androidx.activity.compose.BackHandler { programMenu = false }
+        }
+        LaunchedEffect(groupPanel, programMenu, pinPrompt) {
+            if (!groupPanel && !programMenu && pinPrompt == null) {
                 // Wait out the panel's exit animation; while it is still composed it holds focus,
                 // and a request made earlier is lost when it leaves (focus would drop to the menu).
                 delay(Motion.EXIT_MS + 120L)
@@ -466,4 +572,11 @@ private fun NowLine(windowStart: Long, now: Long, stripWidth: Dp) {
             .size(8.dp)
             .background(ShieldColors.Accent, RoundedCornerShape(50)),
     )
+}
+
+private sealed interface PinPrompt {
+    /** First lock: choose a PIN, then lock [group]. */
+    data class Create(val group: String) : PinPrompt
+    data class ToggleLock(val group: String) : PinPrompt
+    data class Open(val filter: ChannelFilter) : PinPrompt
 }

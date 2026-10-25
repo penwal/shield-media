@@ -19,10 +19,24 @@ import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
+import com.logan.shieldmedia.designsystem.PinPad
 import com.logan.shieldmedia.designsystem.ScreenTitle
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.background
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import com.logan.shieldmedia.designsystem.ShieldColors
 import com.logan.shieldmedia.designsystem.Spacing
 import com.logan.shieldmedia.plex.PlexSession
+import com.logan.shieldmedia.iptv.IptvRepository
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.logan.shieldmedia.plex.PlexState
 import com.logan.shieldmedia.settings.LiveBuffer
 import com.logan.shieldmedia.settings.PlayerSettings
@@ -45,6 +59,7 @@ fun SettingsScreen(
     onPlexProfiles: () -> Unit,
     onOpenIptvSources: () -> Unit,
     onOpenPlayerTest: () -> Unit,
+    iptv: IptvRepository? = null,
 ) {
     val settings by repository.playerSettings.collectAsState(initial = PlayerSettings())
     val plexState by plexSession.state.collectAsState()
@@ -53,117 +68,180 @@ fun SettingsScreen(
     }
     val scope = rememberCoroutineScope()
 
-    Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Settings")
-        LazyColumn(
-            Modifier.width(640.dp),
-            contentPadding = PaddingValues(start = Spacing.ScreenH, bottom = 48.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            item { SectionLabel("Plex") }
-            when (val s = plexState) {
-                is PlexState.Ready -> {
-                    item {
+    var hasPin by remember { mutableStateOf(iptv?.hasParentalPin == true) }
+    var askPin by remember { mutableStateOf(false) }
+    var pinWasAsked by remember { mutableStateOf(false) }
+    val parentalRow = remember { FocusRequester() }
+    // Coming back from the PIN pad, put focus back on the row that opened it.
+    LaunchedEffect(askPin) {
+        if (askPin) pinWasAsked = true
+        if (!askPin && pinWasAsked) {
+            withFrameNanos { }
+            runCatching { parentalRow.requestFocus() }
+        }
+    }
+    var pinError by remember { mutableStateOf<String?>(null) }
+    Box(Modifier.fillMaxSize()) {
+        // While the PIN pad is up, the list underneath can't take focus.
+        Column(Modifier.fillMaxSize().focusProperties { onEnter = { if (askPin) cancelFocusChange() } }.focusGroup()) {
+            ScreenTitle("Settings")
+            LazyColumn(
+                Modifier.width(640.dp),
+                contentPadding = PaddingValues(start = Spacing.ScreenH, bottom = 48.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                item { SectionLabel("Plex") }
+                when (val s = plexState) {
+                    is PlexState.Ready -> {
+                        item {
+                            ListItem(
+                                selected = false,
+                                onClick = { scope.launch { plexSession.discoverServers() } },
+                                headlineContent = { Text("Server: ${s.server.name}") },
+                                supportingContent = { Text(listOfNotNull(plexUser, "Select to switch servers").joinToString("  ·  ")) },
+                            )
+                        }
+                        item {
+                            ListItem(
+                                selected = false,
+                                onClick = onPlexProfiles,
+                                headlineContent = { Text("Switch profile") },
+                                supportingContent = { Text(plexUser?.let { "Watching as $it" } ?: "Plex Home users") },
+                            )
+                        }
+                        item {
+                            ListItem(
+                                selected = false,
+                                onClick = { scope.launch { plexSession.signOut() } },
+                                headlineContent = { Text("Sign out of Plex") },
+                            )
+                        }
+                    }
+                    PlexState.SignedOut -> item {
+                        ListItem(
+                            selected = false,
+                            onClick = onPlexSignIn,
+                            headlineContent = { Text("Sign in with Plex") },
+                            supportingContent = { Text("Link this Shield to your Plex account") },
+                        )
+                    }
+                    else -> item {
                         ListItem(
                             selected = false,
                             onClick = { scope.launch { plexSession.discoverServers() } },
-                            headlineContent = { Text("Server: ${s.server.name}") },
-                            supportingContent = { Text(listOfNotNull(plexUser, "Select to switch servers").joinToString("  ·  ")) },
-                        )
-                    }
-                    item {
-                        ListItem(
-                            selected = false,
-                            onClick = onPlexProfiles,
-                            headlineContent = { Text("Switch profile") },
-                            supportingContent = { Text(plexUser?.let { "Watching as $it" } ?: "Plex Home users") },
-                        )
-                    }
-                    item {
-                        ListItem(
-                            selected = false,
-                            onClick = { scope.launch { plexSession.signOut() } },
-                            headlineContent = { Text("Sign out of Plex") },
+                            headlineContent = { Text("Reconnect to Plex") },
                         )
                     }
                 }
-                PlexState.SignedOut -> item {
-                    ListItem(
-                        selected = false,
-                        onClick = onPlexSignIn,
-                        headlineContent = { Text("Sign in with Plex") },
-                        supportingContent = { Text("Link this Shield to your Plex account") },
-                    )
-                }
-                else -> item {
-                    ListItem(
-                        selected = false,
-                        onClick = { scope.launch { plexSession.discoverServers() } },
-                        headlineContent = { Text("Reconnect to Plex") },
-                    )
-                }
-            }
 
-            item { SectionLabel("Live TV") }
-            item {
-                ListItem(
-                    selected = false,
-                    onClick = onOpenIptvSources,
-                    headlineContent = { Text("Live TV sources") },
-                    supportingContent = { Text("Xtream Codes accounts and M3U playlists") },
-                )
+                item { SectionLabel("Live TV") }
+                item {
+                    ListItem(
+                        selected = false,
+                        onClick = onOpenIptvSources,
+                        headlineContent = { Text("Live TV sources") },
+                        supportingContent = { Text("Xtream Codes accounts and M3U playlists") },
+                    )
+                }
+                item {
+                    // Cycles Fast -> Balanced -> Stable.
+                    ListItem(
+                        selected = false,
+                        onClick = {
+                            val next = LiveBuffer.entries[(settings.liveBuffer.ordinal + 1) % LiveBuffer.entries.size]
+                            scope.launch { repository.setLiveBuffer(next) }
+                        },
+                        headlineContent = { Text("Live TV buffer: ${settings.liveBuffer.label}") },
+                        supportingContent = { Text(settings.liveBuffer.detail) },
+                    )
+                }
+
+                if (iptv != null) {
+                    item {
+                        var upIsNext by remember { mutableStateOf(iptv.upIsNextChannel) }
+                        SettingRow("Up button goes to the next channel", upIsNext) {
+                            iptv.upIsNextChannel = it
+                            upIsNext = it
+                        }
+                    }
+                    item {
+                        ListItem(
+                            selected = false,
+                            // Turning the lock off needs the PIN, or it wouldn't be much of a lock.
+                            onClick = { if (hasPin) askPin = true },
+                            modifier = Modifier.focusRequester(parentalRow),
+                            headlineContent = { Text(if (hasPin) "Remove parental PIN" else "Parental lock") },
+                            supportingContent = {
+                                Text(
+                                    if (hasPin) "Turns the lock off and unlocks every group." else
+                                        "In the guide, open Channel groups and hold OK on a group to lock it.",
+                                )
+                            },
+                        )
+                    }
+                }
+
+                item { SectionLabel("Playback") }
+                item {
+                    ListItem(
+                        selected = true,
+                        onClick = {},
+                        headlineContent = { Text("Plex quality: Original") },
+                        supportingContent = { Text("Always direct play the original file. Transcoding is only a last resort.") },
+                    )
+                }
+                item {
+                    SettingRow("Match display frame rate", settings.autoFrameRate) {
+                        scope.launch { repository.setAutoFrameRate(it) }
+                    }
+                }
+                item {
+                    SettingRow("Audio passthrough (needs AV receiver)", settings.audioPassthrough) {
+                        scope.launch { repository.setAudioPassthrough(it) }
+                    }
+                }
+                item {
+                    SettingRow("Show playback stats overlay", settings.showStatsOverlay) {
+                        scope.launch { repository.setShowStatsOverlay(it) }
+                    }
+                }
+
+                item { SectionLabel("Developer") }
+                item {
+                    ListItem(
+                        selected = false,
+                        onClick = onOpenPlayerTest,
+                        headlineContent = { Text("Player test streams") },
+                        supportingContent = { Text("Try codecs, subtitles and streaming formats") },
+                    )
+                }
             }
-            item {
-                // Cycles Fast -> Balanced -> Stable.
-                ListItem(
-                    selected = false,
-                    onClick = {
-                        val next = LiveBuffer.entries[(settings.liveBuffer.ordinal + 1) % LiveBuffer.entries.size]
-                        scope.launch { repository.setLiveBuffer(next) }
+        }
+        if (askPin && iptv != null) {
+            Box(Modifier.fillMaxSize().background(ShieldColors.Background), contentAlignment = Alignment.Center) {
+                PinPad(
+                    title = "Enter the parental PIN to remove it",
+                    error = pinError,
+                    busy = false,
+                    onSubmit = { pin ->
+                        if (iptv.unlock(pin)) {
+                            iptv.setParentalPin(null)
+                            hasPin = false
+                            askPin = false
+                            pinError = null
+                        } else {
+                            pinError = "Wrong PIN"
+                        }
                     },
-                    headlineContent = { Text("Live TV buffer: ${settings.liveBuffer.label}") },
-                    supportingContent = { Text(settings.liveBuffer.detail) },
-                )
-            }
-
-            item { SectionLabel("Playback") }
-            item {
-                ListItem(
-                    selected = true,
-                    onClick = {},
-                    headlineContent = { Text("Plex quality: Original") },
-                    supportingContent = { Text("Always direct play the original file. Transcoding is only a last resort.") },
-                )
-            }
-            item {
-                SettingRow("Match display frame rate", settings.autoFrameRate) {
-                    scope.launch { repository.setAutoFrameRate(it) }
-                }
-            }
-            item {
-                SettingRow("Audio passthrough (needs AV receiver)", settings.audioPassthrough) {
-                    scope.launch { repository.setAudioPassthrough(it) }
-                }
-            }
-            item {
-                SettingRow("Show playback stats overlay", settings.showStatsOverlay) {
-                    scope.launch { repository.setShowStatsOverlay(it) }
-                }
-            }
-
-            item { SectionLabel("Developer") }
-            item {
-                ListItem(
-                    selected = false,
-                    onClick = onOpenPlayerTest,
-                    headlineContent = { Text("Player test streams") },
-                    supportingContent = { Text("Try codecs, subtitles and streaming formats") },
+                    onCancel = {
+                        askPin = false
+                        pinError = null
+                    },
                 )
             }
         }
     }
 }
-
 @Composable
 private fun SectionLabel(text: String) {
     Text(

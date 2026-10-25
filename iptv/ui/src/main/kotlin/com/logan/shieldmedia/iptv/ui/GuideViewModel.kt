@@ -72,6 +72,7 @@ class GuideViewModel(private val repo: IptvRepository) : ViewModel() {
             return
         }
         groups = repo.groups(id)
+        lockedGroups = repo.lockedGroups(id)
         if (changedPlaylist) filter = ChannelFilter.All
         val list = repo.channels(id, filter)
         channels = list
@@ -163,6 +164,25 @@ class GuideViewModel(private val repo: IptvRepository) : ViewModel() {
     fun hasCatchup(channel: Channel, program: Program, now: Long): Boolean =
         channel.catchupDays > 0 && program.title.isNotEmpty() && program.stop <= now &&
             program.start >= now - channel.catchupDays * DAY_MS
+
+    // ---- parental lock & reminders (thin pass-throughs so the screen talks to one object) ----
+
+    var lockedGroups by mutableStateOf<Set<String>>(emptySet())
+        private set
+    val unlocked: Boolean get() = repo.unlocked.value
+    val hasParentalPin: Boolean get() = repo.hasParentalPin
+
+    fun setParentalPin(pin: String) = repo.setParentalPin(pin)
+    fun checkPin(pin: String): Boolean = repo.unlock(pin)
+    fun unlock(pin: String): Boolean = repo.unlock(pin)
+
+    fun setGroupLocked(group: String, locked: Boolean) {
+        repo.setGroupLocked(playlistId, group, locked)
+        lockedGroups = repo.lockedGroups(playlistId)
+    }
+
+    fun hasReminder(channel: Channel, program: Program) = repo.hasReminder(channel, program)
+    fun toggleReminder(channel: Channel, program: Program) = repo.toggleReminder(channel, program)
 
     fun toggleFavorite(channel: Channel) {
         viewModelScope.launch { repo.setFavorite(channel, !channel.favorite) }

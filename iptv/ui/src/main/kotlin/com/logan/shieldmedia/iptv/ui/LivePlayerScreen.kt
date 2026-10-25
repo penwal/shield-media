@@ -142,6 +142,7 @@ fun LivePlayerScreen(
     var longPressHandled by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val rootFocus = remember { FocusRequester() }
+    val upStep = remember { if (repo.upIsNextChannel) 1 else -1 }
 
     fun showBanner() {
         bannerUntil = System.currentTimeMillis() + BANNER_MS
@@ -274,8 +275,11 @@ fun LivePlayerScreen(
                         if (numberEntry.length < 5) numberEntry += digit
                         true
                     }
-                    event.key == Key.DirectionUp || event.key == Key.ChannelDown -> { tune(index - 1); true }
-                    event.key == Key.DirectionDown || event.key == Key.ChannelUp -> { tune(index + 1); true }
+                    event.key == Key.DirectionUp -> { tune(index + upStep); true }
+                    event.key == Key.DirectionDown -> { tune(index - upStep); true }
+                    // Dedicated channel keys always mean what they say.
+                    event.key == Key.ChannelUp -> { tune(index + 1); true }
+                    event.key == Key.ChannelDown -> { tune(index - 1); true }
                     event.key == Key.LastChannel -> { if (lastIndex >= 0) tune(lastIndex); true }
                     event.key == Key.DirectionLeft || event.key == Key.DirectionRight || event.key == Key.Info -> {
                         showBanner()

@@ -223,8 +223,13 @@ class IptvRepository(context: Context, okHttp: OkHttpClient) {
 
     suspend fun groups(playlistId: Long): List<String> = withContext(Dispatchers.IO) { store.groups(playlistId) }
 
-    suspend fun channels(playlistId: Long, filter: ChannelFilter): List<Channel> =
-        withContext(Dispatchers.IO) { store.channels(playlistId, filter) }
+    /** Channels for a screen. Locked groups stay hidden until the parental PIN is entered. */
+    suspend fun channels(playlistId: Long, filter: ChannelFilter): List<Channel> = withContext(Dispatchers.IO) {
+        val list = store.channels(playlistId, filter)
+        if (unlocked.value || !hasParentalPin) return@withContext list
+        val locked = lockedGroups(playlistId)
+        if (locked.isEmpty()) list else list.filter { it.group !in locked }
+    }
 
     suspend fun programs(playlistId: Long, epgIds: Collection<String>, from: Long, to: Long): Map<String, List<Program>> =
         withContext(Dispatchers.IO) { store.programs(playlistId, epgIds, from, to) }
@@ -250,6 +255,94 @@ class IptvRepository(context: Context, okHttp: OkHttpClient) {
         val minutes = ((program.stop - program.start + 59_999) / 60_000).coerceAtLeast(1)
         return "$base/timeshift/$user/$pass/$minutes/$start/$id.ts"
     }
+
+    // ---- parental lock ----
+
+    private val _unlocked = MutableStateFlow(false)
+    /** True after the PIN was entered; lasts until the app is closed. */
+    val unlocked: StateFlow<Boolean> = _unlocked.asStateFlow()
+
+    val hasParentalPin: Boolean get() = prefs.getString("parental_pin", null) != null
+
+    /** Setting null turns the lock off entirely: every group is unlocked and unmarked. */
+    fun setParentalPin(pin: String?) {
+        prefs.edit().apply {
+            if (pin == null) {
+                remove("parental_pin")
+                prefs.all.keys.filter { it.startsWith("locked_") }.forEach(::remove)
+            } else {
+                putString("parental_pin", pin)
+            }
+        }.apply()
+        _unlocked.value = false
+        _dataVersion.value++
+    }
+
+    /** Checks the PIN and, if right, shows locked groups for the rest of the session. */
+    fun unlock(pin: String): Boolean {
+        val ok = pin == prefs.getString("parental_pin", null)
+        if (ok) {
+            _unlocked.value = true
+            _dataVersion.value++
+        }
+        return ok
+    }
+
+    fun relock() {
+        _unlocked.value = false
+        _dataVersion.value++
+    }
+
+    fun lockedGroups(playlistId: Long): Set<String> = prefs.getStringSet("locked_$playlistId", emptySet()).orEmpty()
+
+    fun setGroupLocked(playlistId: Long, group: String, locked: Boolean) {
+        val now = lockedGroups(playlistId).toMutableSet().apply { if (locked) add(group) else remove(group) }
+        prefs.edit().putStringSet("locked_$playlistId", now).apply()
+        _dataVersion.value++
+    }
+
+    // ---- channel direction ----
+
+    /** Off: Up goes to the previous (lower) channel, like TiviMate. On: Up goes to the next. */
+    var upIsNextChannel: Boolean
+        get() = prefs.getBoolean("up_is_next", false)
+        set(value) = prefs.edit().putBoolean("up_is_next", value).apply()
+
+    // ---- reminders ----
+
+    private val _reminders = MutableStateFlow(loadReminders())
+    val reminders: StateFlow<List<Reminder>> = _reminders.asStateFlow()
+
+    private fun loadReminders(): List<Reminder> =
+        prefs.getStringSet("reminders", emptySet()).orEmpty().mapNotNull(Reminder::decode).sortedBy { it.start }
+
+    private fun saveReminders(list: List<Reminder>) {
+        prefs.edit().putStringSet("reminders", list.map { it.encode() }.toSet()).apply()
+        _reminders.value = list.sortedBy { it.start }
+    }
+
+    fun hasReminder(channel: Channel, program: Program): Boolean =
+        _reminders.value.any { it.channelId == channel.id && it.start == program.start }
+
+    fun toggleReminder(channel: Channel, program: Program) {
+        val list = _reminders.value
+        if (hasReminder(channel, program)) {
+            saveReminders(list.filterNot { it.channelId == channel.id && it.start == program.start })
+        } else {
+            saveReminders(list + Reminder(channel.playlistId, channel.id, channel.name, program.title, program.start))
+        }
+    }
+
+    fun dismissReminder(reminder: Reminder) = saveReminders(_reminders.value - reminder)
+
+    /** Drops reminders for programmes that started more than 10 minutes ago. */
+    fun pruneReminders(now: Long = System.currentTimeMillis()) {
+        val keep = _reminders.value.filter { it.start > now - 10 * 60_000L }
+        if (keep.size != _reminders.value.size) saveReminders(keep)
+    }
+
+    suspend fun channel(playlistId: Long, channelId: Long): Channel? =
+        channels(playlistId, ChannelFilter.All).firstOrNull { it.id == channelId }
 
     fun userAgent(playlistId: Long): String? = _playlists.value.firstOrNull { it.id == playlistId }?.userAgent
 }

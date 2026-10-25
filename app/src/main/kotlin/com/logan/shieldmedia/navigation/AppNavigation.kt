@@ -77,6 +77,7 @@ import com.logan.shieldmedia.iptv.ChannelFilter
 import com.logan.shieldmedia.iptv.ui.AddIptvSourceScreen
 import com.logan.shieldmedia.iptv.ui.IptvSourcesScreen
 import com.logan.shieldmedia.iptv.ui.LiveGuideScreen
+import com.logan.shieldmedia.iptv.ui.ReminderHost
 import com.logan.shieldmedia.iptv.ui.LivePlayHandler
 import com.logan.shieldmedia.screens.PlayerTestScreen
 import com.logan.shieldmedia.screens.SettingsScreen
@@ -105,6 +106,16 @@ typealias PlayHandler = (uri: String, title: String, startMs: Long) -> Unit
 @Composable
 fun AppNavigation(container: AppContainer) {
     val rootNav = rememberNavController()
+    ReminderHost(
+        repo = container.iptv,
+        onWatch = { r -> rootNav.navigate("live?playlist=${r.playlistId}&filter=all&channel=${r.channelId}") },
+    ) {
+        RootGraph(container, rootNav)
+    }
+}
+
+@Composable
+private fun RootGraph(container: AppContainer, rootNav: androidx.navigation.NavHostController) {
     NavHost(
         navController = rootNav,
         startDestination = MAIN_ROUTE,
@@ -396,6 +407,7 @@ private fun MainScaffold(
                             onPlexProfiles = onPlexProfiles,
                             onOpenIptvSources = { navController.navigate(IPTV_SOURCES_ROUTE) },
                             onOpenPlayerTest = { navController.navigate(PLAYER_TEST_ROUTE) },
+                            iptv = container.iptv,
                         )
                     }
                     composable(PLAYER_TEST_ROUTE) { PlayerTestScreen(onPlay) }

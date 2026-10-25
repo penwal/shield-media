@@ -79,3 +79,22 @@ sealed interface SyncState {
     data class Running(val playlist: String, val step: String) : SyncState
     data class Failed(val playlist: String, val message: String) : SyncState
 }
+
+/** "Tell me when this starts." Stored as a single line so it fits in preferences. */
+data class Reminder(
+    val playlistId: Long,
+    val channelId: Long,
+    val channelName: String,
+    val title: String,
+    val start: Long,
+) {
+    fun encode(): String = listOf(playlistId, channelId, start, channelName.replace("\t", " "), title.replace("\t", " ")).joinToString("\t")
+
+    companion object {
+        fun decode(line: String): Reminder? {
+            val p = line.split('\t')
+            if (p.size < 5) return null
+            return Reminder(p[0].toLongOrNull() ?: return null, p[1].toLongOrNull() ?: return null, p[3], p[4], p[2].toLongOrNull() ?: return null)
+        }
+    }
+}

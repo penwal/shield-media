@@ -30,7 +30,13 @@ import com.logan.shieldmedia.designsystem.ShieldIcons
 /** One row in a side panel: a section heading or a selectable option. */
 sealed interface PanelRow {
     data class Header(val text: String) : PanelRow
-    data class Option(val title: String, val detail: String?, val selected: Boolean, val onClick: () -> Unit) : PanelRow
+    data class Option(
+        val title: String,
+        val detail: String?,
+        val selected: Boolean,
+        val onLongClick: (() -> Unit)? = null,
+        val onClick: () -> Unit,
+    ) : PanelRow
 }
 
 
@@ -77,6 +83,7 @@ fun OptionsPanel(title: String, rows: List<PanelRow>, emptyText: String) {
                     is PanelRow.Option -> ListItem(
                         selected = row.selected,
                         onClick = row.onClick,
+                        onLongClick = row.onLongClick,
                         headlineContent = { Text(row.title) },
                         supportingContent = row.detail?.let { { Text(it) } },
                         trailingContent = if (row.selected) {
