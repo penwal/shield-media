@@ -144,7 +144,7 @@ settings/                 settings screens for both sides
 | 0 | **Environment** | Android Studio + SDK installed, Shield connected via network ADB, Android TV emulator working, git repo initialized |
 | 1 | **Skeleton + design system** ✅ | Multi-module project builds; app installs on Shield; nav rail, theme, focusable cards/rows, settings storage. *Done on the emulator; modules `app` + `core:designsystem`. Hilt/Room/Retrofit are deferred until first needed (milestones 3 and 5).* |
 | 2 | **Player core** 🟡 | Plays local/URL test matrix with HW decode, passthrough, AFR, track selection, stats overlay. *Done and verified on the emulator (12/14 test streams; the 2 failures are emulator decoder limits: VP9 4K, 10-bit HLG HEVC). **Still to verify on the Shield:** hardware decode, HDR10/DV output, frame-rate switching, passthrough with an AVR.* |
-| 3 | **Plex: auth + browse** | PIN login, server discovery, home hubs, libraries, details pages, search. *Also: per-screen focus memory, so going Right from the drawer returns to the last focused card, not the nearest one (Compose `focusRestorer` alone does not survive the TV drawer).* |
+| 3 | **Plex: auth + browse** ✅ | PIN login, server discovery, home hubs, libraries, details pages, search. *Done and tested against the real server on the emulator: sign-in, auto server/connection pick, Home (hero + backdrop + hubs), Movies/TV grids with library tabs, show/movie/episode details (seasons, episodes, cast, spec badges), search, direct play with resume, per-screen focus memory, TV Back convention (content → drawer → Home → exit). **Not yet:** Plex Home (managed user) switching.* |
 | 4 | **Plex: playback integration** | Direct play, resume, timeline/scrobble, skip intro/credits, next episode, transcode fallback |
 | 5 | **IPTV: sources + live** | Xtream + M3U login, categories/channels, live playback, fast zapping, favorites |
 | 6 | **IPTV: EPG + guide grid** | XMLTV sync worker, guide grid smooth on Shield, mini guide overlay |
@@ -160,6 +160,13 @@ Milestones 2 and 6 carry the most technical risk. Plan for the most iteration th
 
 - **Opus, high effort:** milestone planning, player core (2), EPG engine + guide grid (6), hard bugs (stutter, focus, sync).
 - **Sonnet or Opus medium:** screens, API models, settings, routine features once patterns exist.
+
+## Design direction (applied in M3; final polish pass in M8)
+
+- Inter variable font with display optical sizing; strong ease-out motion; focus = lift + thin light outline + soft shadow; gold reserved for primary actions/progress.
+- Backdrop crossfades only after focus settles (~280 ms) and only once the new image has loaded.
+- Rows pivot (focused card stays put); detail pages scroll only when the target is off-screen.
+- Overlay (modal) drawer so artwork runs full-bleed and opening the menu never reflows content.
 
 ## Decisions
 

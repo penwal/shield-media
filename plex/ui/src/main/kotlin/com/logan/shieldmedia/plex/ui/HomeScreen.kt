@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -79,7 +80,11 @@ class PlexHomeViewModel(private val env: PlexEnv) : ViewModel() {
                 hubs.sortedByDescending { it.isContinueWatching() }
             }
         }
-        result.onSuccess { _hubs.value = Loadable.Ready(it) }
+        result.onSuccess { hubs ->
+            _hubs.value = Loadable.Ready(hubs)
+            // Show something in the hero and backdrop before the user has moved at all.
+            if (focusedItem == null) focusedItem = hubs.firstOrNull()?.items?.firstOrNull()
+        }
             .onFailure { if (_hubs.value !is Loadable.Ready) _hubs.value = Loadable.Failed(it.message ?: "Unknown error") }
     }
 }
@@ -115,8 +120,9 @@ fun PlexHomeScreen(env: PlexEnv, onOpen: (PlexItem) -> Unit, onPlay: PlexPlayHan
                 MessageState("Nothing here yet", "Add some movies or shows to your Plex server and they'll show up here.")
             } else {
                 Column(Modifier.fillMaxSize()) {
-                    Hero(env, vm.focusedItem, Modifier.padding(top = Spacing.ScreenV).height(250.dp))
-                    PivotScroll(pivot = 0.dp) {
+                    Hero(env, vm.focusedItem, Modifier.padding(top = 24.dp).height(196.dp))
+                    // Pivot below the row title so the focused row keeps its heading visible.
+                    PivotScroll(pivot = 44.dp) {
                         LazyColumn(
                             contentPadding = PaddingValues(bottom = 120.dp),
                             verticalArrangement = Arrangement.spacedBy(Spacing.RowGap - 14.dp),
@@ -189,8 +195,13 @@ internal fun Hero(env: PlexEnv, item: PlexItem?, modifier: Modifier = Modifier) 
         label = "hero",
     ) { focused ->
         if (focused == null) return@AnimatedContent
-        Column(Modifier.widthIn(max = 620.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            TitleOrLogo(env, focused, maxLogoHeight = 96.dp)
+        // wrapContentWidth: AnimatedContent passes its full width down as a minimum, which would
+        // otherwise defeat the width cap and run text across the bright side of the artwork.
+        Column(
+            Modifier.wrapContentWidth(Alignment.Start).widthIn(max = 560.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            TitleOrLogo(env, focused, maxLogoHeight = 84.dp)
             if (focused.type == "episode") {
                 Text(
                     listOfNotNull(focused.episodeLabel, focused.title).joinToString("  ·  "),
@@ -204,7 +215,7 @@ internal fun Hero(env: PlexEnv, item: PlexItem?, modifier: Modifier = Modifier) 
                     it,
                     style = MaterialTheme.typography.bodyMedium,
                     color = ShieldColors.OnSurfaceMuted,
-                    maxLines = 3,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }

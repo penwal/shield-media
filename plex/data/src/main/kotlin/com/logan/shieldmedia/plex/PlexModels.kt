@@ -137,9 +137,12 @@ data class PlexItem(
     val clearLogo: String?
         get() = images.firstOrNull { it.type == "clearLogo" }?.url
 
-    /** Episode label like "S2 · E5". */
+    /** Episode label like "S2 · E5" (just "E5" when Plex leaves out the season number). */
     val episodeLabel: String?
-        get() = if (type == "episode" && parentIndex != null && index != null) "S$parentIndex · E$index" else null
+        get() {
+            if (type != "episode" || index == null) return null
+            return listOfNotNull(parentIndex?.let { "S$it" }, "E$index").joinToString(" · ")
+        }
 }
 
 @Serializable

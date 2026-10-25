@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -34,6 +35,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -123,6 +125,7 @@ fun PlexSearchScreen(env: PlexEnv, onOpen: (PlexItem) -> Unit) {
 private fun SearchField(value: String, onValueChange: (String) -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     LaunchedEffect(focused) { if (!focused) keyboard?.hide() }
 
     Row(
@@ -155,13 +158,16 @@ private fun SearchField(value: String, onValueChange: (String) -> Unit) {
                 modifier = Modifier
                     .onFocusChanged { focused = it.isFocused }
                     .onPreviewKeyEvent { event ->
-                        if (event.type == KeyEventType.KeyUp &&
-                            (event.key == Key.DirectionCenter || event.key == Key.Enter)
-                        ) {
-                            keyboard?.show()
-                            true
-                        } else {
-                            false
+                        when {
+                            event.type == KeyEventType.KeyUp &&
+                                (event.key == Key.DirectionCenter || event.key == Key.Enter) -> {
+                                keyboard?.show()
+                                true
+                            }
+                            // A single-line field would swallow Down; send it on to the results.
+                            event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown ->
+                                focusManager.moveFocus(FocusDirection.Down)
+                            else -> false
                         }
                     },
             )

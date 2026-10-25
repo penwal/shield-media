@@ -218,15 +218,16 @@ private fun CardCaption(title: String, subtitle: String?) {
 /**
  * Keeps the focused item at a fixed position while the list scrolls under it (the "pivot"
  * behaviour of Plex and Apple TV), instead of the list only scrolling at the edges.
+ * With [onlyWhenHidden], items already fully on screen don't move the list at all.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PivotScroll(pivot: Dp, content: @Composable () -> Unit) {
+fun PivotScroll(pivot: Dp, onlyWhenHidden: Boolean = false, content: @Composable () -> Unit) {
     val pivotPx = with(LocalDensity.current) { pivot.toPx() }
-    val spec = remember(pivotPx) {
+    val spec = remember(pivotPx, onlyWhenHidden) {
         object : BringIntoViewSpec {
             override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
-                offset - pivotPx
+                if (onlyWhenHidden && offset >= 0f && offset + size <= containerSize) 0f else offset - pivotPx
         }
     }
     CompositionLocalProvider(LocalBringIntoViewSpec provides spec, content = content)
@@ -409,14 +410,16 @@ fun Modifier.backdropScrim(): Modifier = this
     .background(
         Brush.horizontalGradient(
             0f to ShieldColors.Background,
-            0.35f to ShieldColors.Background.copy(alpha = 0.85f),
-            0.7f to ShieldColors.Background.copy(alpha = 0.2f),
+            0.3f to ShieldColors.Background.copy(alpha = 0.9f),
+            0.55f to ShieldColors.Background.copy(alpha = 0.6f),
+            0.8f to ShieldColors.Background.copy(alpha = 0.15f),
             1f to Color.Transparent,
         ),
     )
     .background(
         Brush.verticalGradient(
-            0.45f to Color.Transparent,
+            0.35f to Color.Transparent,
+            0.75f to ShieldColors.Background.copy(alpha = 0.7f),
             1f to ShieldColors.Background,
         ),
     )

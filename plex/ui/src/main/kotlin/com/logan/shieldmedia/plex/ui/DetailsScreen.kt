@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -22,9 +23,11 @@ import androidx.compose.material.icons.filled.Replay
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -100,12 +103,19 @@ class PlexDetailsViewModel(private val env: PlexEnv, private val ratingKey: Stri
     private suspend fun loadSeasons(show: PlexItem, preferredSeasonKey: String?) {
         val list = runCatching { env.library.children(env.server, show.ratingKey) }.getOrDefault(emptyList())
         seasons = list
-        val firstUnfinished = list.firstOrNull { !it.isWatched } ?: list.firstOrNull()
+        val firstUnfinished = list.firstOrNull { !it.isWatched } ?: list.firstOrNull() ?: return
+        val unfinishedEpisodes = runCatching { env.library.children(env.server, firstUnfinished.ratingKey) }
+            .getOrDefault(emptyList())
+        nextEpisode = unfinishedEpisodes.firstOrNull { (it.viewOffset ?: 0) > 0 }
+            ?: unfinishedEpisodes.firstOrNull { !it.isWatched }
+            ?: unfinishedEpisodes.firstOrNull()
+
         val initial = list.firstOrNull { it.ratingKey == preferredSeasonKey } ?: firstUnfinished
-        initial?.let { showSeason(it, immediate = true) }
-        firstUnfinished?.let { season ->
-            val eps = if (season == initial) episodes.orEmpty() else env.library.children(env.server, season.ratingKey)
-            nextEpisode = eps.firstOrNull { (it.viewOffset ?: 0) > 0 } ?: eps.firstOrNull { !it.isWatched } ?: eps.firstOrNull()
+        if (initial == firstUnfinished) {
+            selectedSeason = initial
+            episodes = unfinishedEpisodes
+        } else {
+            showSeason(initial, immediate = true)
         }
     }
 
@@ -141,9 +151,16 @@ fun PlexDetailsScreen(
             is Loadable.Ready -> {
                 val item = s.value
                 Backdrop(env.backdrop(item))
-                PivotScroll(pivot = Spacing.ScreenV) {
-                    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp)) {
-                        item(key = "hero") { DetailsHero(env, item, vm, onPlay) }
+                val listState = rememberLazyListState()
+                val scope = rememberCoroutineScope()
+                PivotScroll(pivot = 44.dp, onlyWhenHidden = true) {
+                    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 80.dp)) {
+                        item(key = "hero") {
+                            // Coming back up to the buttons shows the whole hero again, title included.
+                            Box(Modifier.onFocusChanged { if (it.hasFocus) scope.launch { listState.animateScrollToItem(0) } }) {
+                                DetailsHero(env, item, vm, onPlay)
+                            }
+                        }
                         if (item.type == "show" && vm.seasons.isNotEmpty()) {
                             item(key = "seasons") { SeasonsRow(env, vm) }
                             item(key = "episodes") { EpisodesRow(env, vm, onOpen, onPlay) }

@@ -1,6 +1,8 @@
 package com.logan.shieldmedia.navigation
 
 import android.net.Uri
+import android.os.SystemClock
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -15,8 +17,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -25,6 +30,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -52,6 +58,7 @@ import com.logan.shieldmedia.screens.PlayerRoute
 import com.logan.shieldmedia.screens.PlayerTestScreen
 import com.logan.shieldmedia.screens.SettingsScreen
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val MAIN_ROUTE = "main"
 private const val PLAYER_ROUTE = "player?uri={uri}&title={title}&start={start}"
@@ -126,6 +133,10 @@ private fun MainScaffold(container: AppContainer, onPlay: PlayHandler, onPlexSig
     val contentFocus = remember { FocusRequester() }
     var contentHasFocus by remember { mutableStateOf(false) }
     var drawerHasFocus by remember { mutableStateOf(false) }
+    // Focus can land in the drawer by itself (e.g. when a loading screen loses its only focusable
+    // item). Only a drawer the user moved into with the remote should block content from taking focus.
+    var drawerEnteredByUser by remember { mutableStateOf(false) }
+    var lastKeyAt by remember { mutableLongStateOf(0L) }
     var navigatedFromDrawer by remember { mutableStateOf(false) }
     LaunchedEffect(currentRoute) {
         if (navigatedFromDrawer) {
@@ -136,13 +147,20 @@ private fun MainScaffold(container: AppContainer, onPlay: PlayHandler, onPlexSig
         if (!contentHasFocus) runCatching { contentFocus.requestFocus() }
     }
 
+    val drawerFocus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+
     val openItem: (PlexItem) -> Unit = { navController.navigate("plex/item/${it.ratingKey}") }
     val plex: @Composable (@Composable (com.logan.shieldmedia.plex.ui.PlexEnv) -> Unit) -> Unit = { screen ->
         PlexGate(container.plexSession, container.plexLibrary, onSignIn = onPlexSignIn, content = screen)
     }
 
-    CompositionLocalProvider(LocalContentFocusGate provides { !drawerHasFocus }) {
+    CompositionLocalProvider(LocalContentFocusGate provides { !(drawerHasFocus && drawerEnteredByUser) }) {
         ModalNavigationDrawer(
+            modifier = Modifier.onPreviewKeyEvent {
+                lastKeyAt = SystemClock.uptimeMillis()
+                false
+            },
             scrimBrush = Brush.horizontalGradient(
                 listOf(ShieldColors.Background.copy(alpha = 0.92f), ShieldColors.Background.copy(alpha = 0.4f)),
             ),
@@ -150,13 +168,19 @@ private fun MainScaffold(container: AppContainer, onPlay: PlayHandler, onPlexSig
                 Column(
                     Modifier
                         .fillMaxHeight()
-                        .onFocusChanged { drawerHasFocus = it.hasFocus }
+                        .onFocusChanged {
+                            if (it.hasFocus && !drawerHasFocus) {
+                                drawerEnteredByUser = SystemClock.uptimeMillis() - lastKeyAt < 500
+                            }
+                            drawerHasFocus = it.hasFocus
+                        }
                         .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
                 ) {
                     Destination.entries.forEach { dest ->
                         NavigationDrawerItem(
                             selected = lastSection == dest.route,
+                            modifier = if (lastSection == dest.route) Modifier.focusRequester(drawerFocus) else Modifier,
                             onClick = {
                                 if (currentRoute != dest.route) {
                                     navigatedFromDrawer = true
@@ -218,6 +242,23 @@ private fun MainScaffold(container: AppContainer, onPlay: PlayHandler, onPlexSig
                         val ratingKey = entry.arguments?.getString("ratingKey").orEmpty()
                         plex { env -> PlexDetailsScreen(env, ratingKey, onOpen = openItem, onPlay = onPlay) }
                     }
+                }
+            }
+            // Android TV Back convention: content -> drawer -> Home -> exit.
+            BackHandler(enabled = topLevel != null && !drawerHasFocus) {
+                runCatching { drawerFocus.requestFocus() }
+            }
+            BackHandler(enabled = drawerHasFocus && currentRoute != Destination.Home.route) {
+                navigatedFromDrawer = true
+                lastSection = Destination.Home.route
+                navController.navigate(Destination.Home.route) {
+                    popUpTo(Destination.Home.route)
+                    launchSingleTop = true
+                }
+                // Move the drawer's focus to Home once the requester has followed the selection.
+                scope.launch {
+                    withFrameNanos { }
+                    runCatching { drawerFocus.requestFocus() }
                 }
             }
         }
