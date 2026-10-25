@@ -35,15 +35,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Audiotrack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ClosedCaption
-import androidx.compose.material.icons.filled.Forward30
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -69,7 +60,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -101,11 +91,27 @@ import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.logan.shieldmedia.designsystem.ShieldColors
+import com.logan.shieldmedia.designsystem.ShieldIcon
+import com.logan.shieldmedia.designsystem.ShieldIcons
+import com.logan.shieldmedia.designsystem.SpecBadge
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.requiredSize
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private enum class OsdFocus { PlayPause, SeekBar }
-private enum class TrackPanel { Audio, Subtitles }
+private enum class TrackPanel { Audio, Subtitles, Settings }
+private enum class Zoom(val label: String) { Fit("Fit"), Fill("Fill screen") }
+private enum class SubtitleSize(val label: String, val scale: Float) {
+    Small("Small", 0.85f), Normal("Normal", 1.15f), Large("Large", 1.45f)
+}
+
+/** One row in a side panel: a section heading or a selectable option. */
+private sealed interface PanelRow {
+    data class Header(val text: String) : PanelRow
+    data class Option(val title: String, val detail: String?, val selected: Boolean, val onClick: () -> Unit) : PanelRow
+}
 
 private const val OSD_TIMEOUT_MS = 5_000L
 
@@ -116,6 +122,8 @@ fun PlayerScreen(
     config: PlaybackConfig,
     onExit: () -> Unit,
     startPositionMs: Long = 0L,
+    /** What is being played, e.g. "Direct Play · Original"; shown under the title and in stats. */
+    sourceLabel: String? = null,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -141,6 +149,8 @@ fun PlayerScreen(
     var lastInteraction by remember { mutableLongStateOf(0L) }
     var panel by remember { mutableStateOf<TrackPanel?>(null) }
     var statsVisible by remember { mutableStateOf(config.showStats) }
+    var zoom by remember { mutableStateOf(Zoom.Fit) }
+    var subtitleSize by remember { mutableStateOf(SubtitleSize.Normal) }
     var statsSnapshot by remember { mutableStateOf<PlaybackStats?>(null) }
 
     val rootFocus = remember { FocusRequester() }
@@ -148,6 +158,7 @@ fun PlayerScreen(
     val seekFocus = remember { FocusRequester() }
     val audioFocus = remember { FocusRequester() }
     val subtitlesFocus = remember { FocusRequester() }
+    val settingsFocus = remember { FocusRequester() }
     // When a track panel closes, focus goes back to the button that opened it.
     var returnFocus by remember { mutableStateOf<FocusRequester?>(null) }
 
@@ -227,7 +238,8 @@ fun PlayerScreen(
 
     LaunchedEffect(statsVisible) {
         while (statsVisible) {
-            statsSnapshot = stats.snapshot(player, frameRateMatcher.currentModeLabel())
+            val snap = stats.snapshot(player, frameRateMatcher.currentModeLabel())
+            statsSnapshot = if (sourceLabel != null) PlaybackStats(listOf("Source" to sourceLabel) + snap.lines) else snap
             delay(1_000)
         }
     }
@@ -301,7 +313,14 @@ fun PlayerScreen(
             .focusRequester(rootFocus)
             .focusable(),
     ) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            val screenAspect = maxWidth / maxHeight
+            // Fill crops to cover the screen (never stretches); Fit letterboxes.
+            val surfaceModifier = when {
+                zoom == Zoom.Fit -> Modifier.aspectRatio(videoAspect)
+                videoAspect > screenAspect -> Modifier.requiredSize(maxHeight * videoAspect, maxHeight)
+                else -> Modifier.requiredSize(maxWidth, maxWidth / videoAspect)
+            }
             AndroidView(
                 factory = { ctx ->
                     // SurfaceView (not TextureView) is required for HDR/Dolby Vision output and lowest power.
@@ -310,7 +329,7 @@ fun PlayerScreen(
                         player.setVideoSurfaceView(this)
                     }
                 },
-                modifier = Modifier.aspectRatio(videoAspect),
+                modifier = surfaceModifier,
             )
         }
 
@@ -318,6 +337,7 @@ fun PlayerScreen(
             factory = { ctx -> SubtitleView(ctx).apply { applyTvStyle() } },
             update = {
                 it.setCues(cues)
+                it.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * subtitleSize.scale)
                 // Lift subtitles clear of the controls while the OSD is up.
                 it.setBottomPaddingFraction(if (osdVisible) 0.28f else 0.06f)
             },
@@ -335,6 +355,7 @@ fun PlayerScreen(
         ) {
             Osd(
                 title = title,
+                sourceLabel = sourceLabel,
                 isPlaying = isPlaying,
                 position = position,
                 duration = duration,
@@ -343,6 +364,7 @@ fun PlayerScreen(
                 seekFocus = seekFocus,
                 audioFocus = audioFocus,
                 subtitlesFocus = subtitlesFocus,
+                settingsFocus = settingsFocus,
                 onTogglePlay = { player.togglePlayPause() },
                 onSeekBack = { player.seekBack() },
                 onSeekForward = { player.seekForward() },
@@ -353,6 +375,10 @@ fun PlayerScreen(
                 onSubtitles = {
                     returnFocus = subtitlesFocus
                     panel = TrackPanel.Subtitles
+                },
+                onSettings = {
+                    returnFocus = settingsFocus
+                    panel = TrackPanel.Settings
                 },
                 onStats = { statsVisible = !statsVisible },
             )
@@ -370,17 +396,39 @@ fun PlayerScreen(
             modifier = Modifier.align(Alignment.CenterEnd),
         ) {
             val kind = panel ?: TrackPanel.Audio
-            val options = remember(tracksVersion, kind) {
-                if (kind == TrackPanel.Audio) player.audioOptions() else player.subtitleOptions()
-            }
-            TrackPanelView(
-                title = if (kind == TrackPanel.Audio) "Audio" else "Subtitles",
-                options = options,
-                onSelect = { option ->
+            val rows: List<PanelRow> = when (kind) {
+                TrackPanel.Audio, TrackPanel.Subtitles -> {
                     val type = if (kind == TrackPanel.Audio) C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
-                    player.selectTrack(type, option)
-                    panel = null
+                    val options = remember(tracksVersion, kind) {
+                        if (kind == TrackPanel.Audio) player.audioOptions() else player.subtitleOptions()
+                    }
+                    options.map { option ->
+                        PanelRow.Option(option.title, option.detail, option.selected) {
+                            player.selectTrack(type, option)
+                            panel = null
+                        }
+                    }
+                }
+                TrackPanel.Settings -> buildList {
+                    add(PanelRow.Header("Quality"))
+                    // Always the untouched original file; transcoding is only ever a fallback.
+                    add(PanelRow.Option("Original", sourceLabel ?: "Plays the stream as-is", true) {})
+                    add(PanelRow.Header("Zoom"))
+                    Zoom.entries.forEach { z -> add(PanelRow.Option(z.label, null, zoom == z) { zoom = z }) }
+                    add(PanelRow.Header("Subtitle size"))
+                    SubtitleSize.entries.forEach { size ->
+                        add(PanelRow.Option(size.label, null, subtitleSize == size) { subtitleSize = size })
+                    }
+                }
+            }
+            OptionsPanel(
+                title = when (kind) {
+                    TrackPanel.Audio -> "Audio"
+                    TrackPanel.Subtitles -> "Subtitles"
+                    TrackPanel.Settings -> "Playback"
                 },
+                rows = rows,
+                emptyText = "No tracks available",
             )
         }
 
@@ -403,6 +451,7 @@ private fun Player.togglePlayPause() {
 @Composable
 private fun Osd(
     title: String,
+    sourceLabel: String?,
     isPlaying: Boolean,
     position: Long,
     duration: Long,
@@ -411,11 +460,13 @@ private fun Osd(
     seekFocus: FocusRequester,
     audioFocus: FocusRequester,
     subtitlesFocus: FocusRequester,
+    settingsFocus: FocusRequester,
     onTogglePlay: () -> Unit,
     onSeekBack: () -> Unit,
     onSeekForward: () -> Unit,
     onAudio: () -> Unit,
     onSubtitles: () -> Unit,
+    onSettings: () -> Unit,
     onStats: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize()) {
@@ -425,13 +476,18 @@ private fun Osd(
                 .height(180.dp)
                 .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.75f), Color.Transparent))),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White,
-                modifier = Modifier.padding(horizontal = 56.dp, vertical = 40.dp),
-            )
+            Column(
+                Modifier.padding(horizontal = 56.dp, vertical = 40.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+                if (sourceLabel != null) SpecBadge(sourceLabel)
+            }
         }
 
         Column(
@@ -463,18 +519,19 @@ private fun Osd(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                OsdButton(Icons.Filled.Replay10, "Back 10 seconds", onSeekBack)
+                OsdButton(ShieldIcons.Back10, "Back 10 seconds", onSeekBack)
                 OsdButton(
-                    icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    icon = if (isPlaying) ShieldIcons.Pause else ShieldIcons.Play,
                     label = if (isPlaying) "Pause" else "Play",
                     onClick = onTogglePlay,
                     modifier = Modifier.focusRequester(playFocus),
                 )
-                OsdButton(Icons.Filled.Forward30, "Forward 30 seconds", onSeekForward)
+                OsdButton(ShieldIcons.Forward30, "Forward 30 seconds", onSeekForward)
                 Spacer(Modifier.weight(1f))
-                OsdButton(Icons.Filled.Audiotrack, "Audio", onAudio, Modifier.focusRequester(audioFocus))
-                OsdButton(Icons.Filled.ClosedCaption, "Subtitles", onSubtitles, Modifier.focusRequester(subtitlesFocus))
-                OsdButton(Icons.Filled.Info, "Playback stats", onStats)
+                OsdButton(ShieldIcons.Audio, "Audio", onAudio, Modifier.focusRequester(audioFocus))
+                OsdButton(ShieldIcons.Subtitles, "Subtitles", onSubtitles, Modifier.focusRequester(subtitlesFocus))
+                OsdButton(ShieldIcons.Tune, "Playback settings", onSettings, Modifier.focusRequester(settingsFocus))
+                OsdButton(ShieldIcons.Info, "Playback stats", onStats)
             }
         }
     }
@@ -483,13 +540,13 @@ private fun Osd(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun OsdButton(
-    icon: ImageVector,
+    @DrawableRes icon: Int,
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     IconButton(onClick = onClick, modifier = modifier) {
-        Icon(icon, contentDescription = label)
+        ShieldIcon(icon, contentDescription = label)
     }
 }
 
@@ -536,14 +593,11 @@ private fun SeekBar(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun TrackPanelView(
-    title: String,
-    options: List<TrackOption>,
-    onSelect: (TrackOption) -> Unit,
-) {
+private fun OptionsPanel(title: String, rows: List<PanelRow>, emptyText: String) {
     val firstFocus = remember { FocusRequester() }
-    val focusIndex = options.indexOfFirst { it.selected }.coerceAtLeast(0)
-    LaunchedEffect(options) {
+    val options = rows.filterIsInstance<PanelRow.Option>()
+    val focusTarget = options.firstOrNull { it.selected } ?: options.firstOrNull()
+    LaunchedEffect(title) {
         withFrameNanos { }
         runCatching { firstFocus.requestFocus() }
     }
@@ -566,22 +620,30 @@ private fun TrackPanelView(
             modifier = Modifier.padding(start = 12.dp, bottom = 16.dp),
         )
         if (options.isEmpty()) {
-            Text("No tracks available", color = ShieldColors.OnSurfaceMuted, modifier = Modifier.padding(12.dp))
+            Text(emptyText, color = ShieldColors.OnSurfaceMuted, modifier = Modifier.padding(12.dp))
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            itemsIndexed(options) { index, option ->
-                ListItem(
-                    selected = option.selected,
-                    onClick = { onSelect(option) },
-                    headlineContent = { Text(option.title) },
-                    supportingContent = option.detail?.let { { Text(it) } },
-                    trailingContent = if (option.selected) {
-                        { Icon(Icons.Filled.Check, contentDescription = "Selected") }
-                    } else {
-                        null
-                    },
-                    modifier = if (index == focusIndex) Modifier.focusRequester(firstFocus) else Modifier,
-                )
+            itemsIndexed(rows) { _, row ->
+                when (row) {
+                    is PanelRow.Header -> Text(
+                        row.text.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ShieldColors.OnSurfaceFaint,
+                        modifier = Modifier.padding(start = 12.dp, top = 16.dp, bottom = 4.dp),
+                    )
+                    is PanelRow.Option -> ListItem(
+                        selected = row.selected,
+                        onClick = row.onClick,
+                        headlineContent = { Text(row.title) },
+                        supportingContent = row.detail?.let { { Text(it) } },
+                        trailingContent = if (row.selected) {
+                            { ShieldIcon(ShieldIcons.Check, contentDescription = "Selected", size = 20.dp) }
+                        } else {
+                            null
+                        },
+                        modifier = if (row == focusTarget) Modifier.focusRequester(firstFocus) else Modifier,
+                    )
+                }
             }
         }
     }

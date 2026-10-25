@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,9 +28,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
@@ -39,12 +47,14 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Icon
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.NavigationDrawerItemDefaults
 import androidx.tv.material3.ModalNavigationDrawer
 import androidx.tv.material3.NavigationDrawerItem
 import androidx.tv.material3.Text
 import com.logan.shieldmedia.AppContainer
 import com.logan.shieldmedia.designsystem.LocalContentFocusGate
+import com.logan.shieldmedia.designsystem.ShieldIcon
 import com.logan.shieldmedia.designsystem.ShieldColors
 import com.logan.shieldmedia.plex.PlexItem
 import com.logan.shieldmedia.plex.ui.PlexDetailsScreen
@@ -174,13 +184,45 @@ private fun MainScaffold(container: AppContainer, onPlay: PlayHandler, onPlexSig
                             }
                             drawerHasFocus = it.hasFocus
                         }
+                        // Entering the menu always lands on the current section, not the nearest item.
+                        .focusProperties { onEnter = { drawerFocus.requestFocus() } }
+                        .focusGroup()
                         .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
                 ) {
                     Destination.entries.forEach { dest ->
+                        val selected = lastSection == dest.route
                         NavigationDrawerItem(
-                            selected = lastSection == dest.route,
-                            modifier = if (lastSection == dest.route) Modifier.focusRequester(drawerFocus) else Modifier,
+                            selected = selected,
+                            modifier = Modifier
+                                .then(if (selected) Modifier.focusRequester(drawerFocus) else Modifier)
+                                // Current section: a slim gold marker rather than a filled pill.
+                                .drawBehind {
+                                    if (selected) {
+                                        val h = 18.dp.toPx()
+                                        drawRoundRect(
+                                            color = ShieldColors.Accent,
+                                            topLeft = Offset(0f, (size.height - h) / 2),
+                                            size = Size(3.dp.toPx(), h),
+                                            cornerRadius = CornerRadius(2.dp.toPx()),
+                                        )
+                                    }
+                                },
+                            shape = NavigationDrawerItemDefaults.shape(RoundedCornerShape(12.dp)),
+                            scale = NavigationDrawerItemDefaults.scale(focusedScale = 1f),
+                            colors = NavigationDrawerItemDefaults.colors(
+                                containerColor = Color.Transparent,
+                                contentColor = ShieldColors.OnSurfaceMuted,
+                                inactiveContentColor = ShieldColors.OnSurfaceFaint,
+                                focusedContainerColor = Color.White.copy(alpha = 0.1f),
+                                focusedContentColor = ShieldColors.OnSurface,
+                                selectedContainerColor = Color.Transparent,
+                                selectedContentColor = ShieldColors.OnSurface,
+                                focusedSelectedContainerColor = Color.White.copy(alpha = 0.1f),
+                                focusedSelectedContentColor = ShieldColors.OnSurface,
+                                pressedContainerColor = Color.White.copy(alpha = 0.16f),
+                                pressedContentColor = ShieldColors.OnSurface,
+                            ),
                             onClick = {
                                 if (currentRoute != dest.route) {
                                     navigatedFromDrawer = true
@@ -190,9 +232,9 @@ private fun MainScaffold(container: AppContainer, onPlay: PlayHandler, onPlexSig
                                     }
                                 }
                             },
-                            leadingContent = { Icon(dest.icon, contentDescription = dest.label) },
+                            leadingContent = { ShieldIcon(dest.icon, contentDescription = dest.label, size = 22.dp) },
                         ) {
-                            Text(dest.label)
+                            Text(dest.label, style = MaterialTheme.typography.titleMedium)
                         }
                     }
                 }

@@ -54,7 +54,15 @@ fun PlayerRoute(
     if (loaded == null) {
         Box(Modifier.fillMaxSize().background(Color.Black))
     } else {
-        PlayerScreen(uri = uri, title = title, startPositionMs = startMs, config = loaded, onExit = onExit)
+        PlayerScreen(
+            uri = uri,
+            title = title,
+            startPositionMs = startMs,
+            config = loaded,
+            onExit = onExit,
+            // Plex part URLs are the original file, streamed untouched.
+            sourceLabel = if ("/library/parts/" in uri) "Direct Play · Original" else null,
+        )
     }
 }
 
