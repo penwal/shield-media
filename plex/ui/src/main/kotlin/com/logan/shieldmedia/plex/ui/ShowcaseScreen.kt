@@ -38,7 +38,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -161,12 +160,11 @@ fun PlexShowcaseScreen(env: PlexEnv, sectionKey: String, title: String, onOpen: 
     val detail = current?.let { vm.details[it.ratingKey] } ?: current
 
     Box(Modifier.fillMaxSize()) {
-        val art = env.backdrop(current)
-        var artShown by remember { mutableStateOf<String?>(null) }
-        Backdrop(art, onShown = { artShown = it })
-        // The trailer plays silently over the artwork; the same scrims sit on top of it. On a
-        // change of title it holds until the new artwork is in place, then fades straight to it.
-        TrailerBackdrop(env, current, artReady = { art == null || artShown == art })
+        // On a change of title the new artwork fades in while the trailer fades out, together
+        // (the artwork is prefetched, so it can change at once).
+        Backdrop(env.backdrop(current), settleMs = 0)
+        // The trailer plays silently over the artwork; the same scrims sit on top of it.
+        TrailerBackdrop(env, current)
         TechOverlay()
 
         when {

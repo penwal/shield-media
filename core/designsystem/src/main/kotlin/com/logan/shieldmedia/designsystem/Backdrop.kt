@@ -27,12 +27,12 @@ import kotlinx.coroutines.delay
 fun Backdrop(
     imageUrl: String?,
     modifier: Modifier = Modifier,
-    /** Called once [imageUrl] is fully on screen (loaded and crossfaded in). */
-    onShown: ((String?) -> Unit)? = null,
+    /** How long focus must rest before the picture changes; 0 changes as soon as it's loaded. */
+    settleMs: Long = Motion.BACKDROP_SETTLE_MS,
 ) {
     var settledUrl by remember { mutableStateOf(imageUrl) }
     LaunchedEffect(imageUrl) {
-        if (settledUrl != null) delay(Motion.BACKDROP_SETTLE_MS)
+        if (settledUrl != null) delay(settleMs)
         settledUrl = imageUrl
     }
 
@@ -40,11 +40,7 @@ fun Backdrop(
     val painter = rememberAsyncImagePainter(settledUrl)
     val state by painter.state.collectAsState()
     LaunchedEffect(state, settledUrl) {
-        if (state is AsyncImagePainter.State.Success || settledUrl == null) {
-            shownUrl = settledUrl
-            delay(Motion.BACKDROP_MS.toLong())
-            onShown?.invoke(settledUrl)
-        }
+        if (state is AsyncImagePainter.State.Success || settledUrl == null) shownUrl = settledUrl
     }
 
     Box(modifier.fillMaxSize()) {
