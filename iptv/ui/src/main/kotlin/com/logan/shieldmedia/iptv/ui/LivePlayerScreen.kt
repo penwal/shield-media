@@ -148,6 +148,8 @@ fun LivePlayerScreen(
     val upStep = remember { if (repo.upIsNextChannel) 1 else -1 }
     val scope = rememberCoroutineScope()
     var reconnectJob by remember { mutableStateOf<Job?>(null) }
+    val videoSurface = remember { VideoSurfaceRef() }
+    var peeking by remember { mutableStateOf(false) }
 
     fun showBanner() {
         bannerUntil = System.currentTimeMillis() + BANNER_MS
@@ -278,6 +280,18 @@ fun LivePlayerScreen(
     val onNow = programs.firstOrNull { it.isAiring(now) }
     val upNext = programs.firstOrNull { it.start >= (onNow?.stop ?: now) }
 
+    // Commercial breaks (CommercialBreaks.kt): cover the picture and mute until the show is back.
+    // OK during a break ("watch anyway") uncovers it until the next one.
+    val inBreak = rememberCommercialBreak(
+        enabled = config.hideCommercials,
+        channelKey = current?.let { "${it.playlistId}:${it.key}" },
+        surface = videoSurface,
+        isPlaying = { player.isPlaying },
+    )
+    LaunchedEffect(inBreak) { if (!inBreak) peeking = false }
+    val covered = inBreak && !peeking && failed == null
+    LaunchedEffect(covered) { player.volume = if (covered) 0f else 1f }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -291,7 +305,9 @@ fun LivePlayerScreen(
                         longPressHandled = true
                     }
                     if (event.type == KeyEventType.KeyUp) {
-                        if (!longPressHandled) overlay = LiveOverlay.Channels
+                        if (!longPressHandled) {
+                            if (covered) peeking = true else overlay = LiveOverlay.Channels
+                        }
                         longPressHandled = false
                     }
                     return@onPreviewKeyEvent true
@@ -321,9 +337,19 @@ fun LivePlayerScreen(
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             AndroidView(
-                factory = { ctx -> SurfaceView(ctx).apply { keepScreenOn = true; player.setVideoSurfaceView(this) } },
+                factory = { ctx ->
+                    SurfaceView(ctx).apply {
+                        keepScreenOn = true
+                        player.setVideoSurfaceView(this)
+                        videoSurface.view = this
+                    }
+                },
                 modifier = Modifier.aspectRatio(videoAspect),
             )
+        }
+
+        AnimatedVisibility(visible = covered && current != null, enter = fadeIn(tween(350)), exit = fadeOut(tween(700))) {
+            current?.let { CommercialCover(it, onNow?.title) }
         }
 
         if (buffering && failed == null && current != null) {

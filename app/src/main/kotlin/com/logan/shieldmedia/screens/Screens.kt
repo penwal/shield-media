@@ -158,6 +158,12 @@ fun SettingsScreen(
                     )
                 }
 
+                item {
+                    SettingRow("Hide commercials on live TV (beta)", settings.hideCommercials) {
+                        scope.launch { repository.setHideCommercials(it) }
+                    }
+                }
+
                 if (iptv != null) {
                     item {
                         var upIsNext by remember { mutableStateOf(iptv.upIsNextChannel) }

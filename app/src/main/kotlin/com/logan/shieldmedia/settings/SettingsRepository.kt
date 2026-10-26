@@ -18,6 +18,7 @@ data class PlayerSettings(
     val showStatsOverlay: Boolean = false,
     val liveBuffer: LiveBuffer = LiveBuffer.Balanced,
     val uiSize: UiSize = UiSize.Standard,
+    val hideCommercials: Boolean = true,
 )
 
 /** Overall interface size. Everything (text, cards, menus) scales together. */
@@ -40,6 +41,7 @@ class SettingsRepository(private val context: Context) {
         val StatsOverlay = booleanPreferencesKey("stats_overlay")
         val LiveBufferKey = intPreferencesKey("live_buffer")
         val UiSizeKey = intPreferencesKey("ui_size")
+        val HideCommercials = booleanPreferencesKey("hide_commercials")
     }
 
     val playerSettings: Flow<PlayerSettings> = context.dataStore.data.map { p ->
@@ -49,6 +51,7 @@ class SettingsRepository(private val context: Context) {
             showStatsOverlay = p[Keys.StatsOverlay] ?: false,
             liveBuffer = LiveBuffer.entries.getOrNull(p[Keys.LiveBufferKey] ?: -1) ?: LiveBuffer.Balanced,
             uiSize = UiSize.entries.getOrNull(p[Keys.UiSizeKey] ?: -1) ?: UiSize.Standard,
+            hideCommercials = p[Keys.HideCommercials] ?: true,
         )
     }
 
@@ -66,6 +69,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setLiveBuffer(value: LiveBuffer) {
         context.dataStore.edit { it[Keys.LiveBufferKey] = value.ordinal }
+    }
+
+    suspend fun setHideCommercials(value: Boolean) {
+        context.dataStore.edit { it[Keys.HideCommercials] = value }
     }
 
     suspend fun setShowStatsOverlay(value: Boolean) {

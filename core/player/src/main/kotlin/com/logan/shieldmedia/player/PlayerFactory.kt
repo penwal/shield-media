@@ -24,6 +24,8 @@ data class PlaybackConfig(
     val userAgent: String = "ShieldMedia/0.1",
     /** Live TV: how much video to hold before starting (and twice that after a stall). */
     val liveBufferMs: Int = 3_000,
+    /** Live TV: cover the picture during detected commercial breaks. */
+    val hideCommercials: Boolean = false,
 )
 
 object PlayerFactory {

@@ -99,6 +99,7 @@ fun LiveRoute(
             showStats = s.showStatsOverlay,
             userAgent = repo.userAgent(playlistId) ?: DEFAULT_USER_AGENT,
             liveBufferMs = s.liveBuffer.millis,
+            hideCommercials = s.hideCommercials,
         )
     }
     val loaded = config
