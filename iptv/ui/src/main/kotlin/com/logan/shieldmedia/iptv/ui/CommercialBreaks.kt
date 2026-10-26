@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
@@ -46,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -416,8 +418,8 @@ private suspend fun copyFrame(view: SurfaceView, into: Bitmap, handler: Handler)
     }
 
 /** The small live preview during a break: bottom-right, 16:9. */
-internal val PreviewWidth = 384.dp
-internal val PreviewHeight = 216.dp
+internal val PreviewWidth = 288.dp
+internal val PreviewHeight = 162.dp
 internal val PreviewMargin = 56.dp
 private val PreviewCorner = 12.dp
 
@@ -475,12 +477,19 @@ internal fun CommercialCover(channel: Channel, programTitle: String?, modifier: 
         Row(
             Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = PreviewMargin, bottom = PreviewMargin + PreviewHeight + 12.dp),
+                .padding(end = PreviewMargin, bottom = PreviewMargin + PreviewHeight + 10.dp)
+                .width(PreviewWidth),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.size(7.dp).background(Color(0xFFE5484D), CircleShape))
-            Text("STILL ON  ·  ${channel.name}", style = MaterialTheme.typography.labelMedium, color = ShieldColors.OnSurfaceMuted, maxLines = 1)
+            Text(
+                "STILL ON  ·  ${channel.name}",
+                style = MaterialTheme.typography.labelMedium,
+                color = ShieldColors.OnSurfaceMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(width = 180.dp, height = 90.dp), contentAlignment = Alignment.Center) {
