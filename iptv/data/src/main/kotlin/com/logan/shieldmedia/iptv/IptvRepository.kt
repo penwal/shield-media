@@ -20,6 +20,7 @@ private const val EPG_DAYS_BACK = 1L
 private const val EPG_DAYS_AHEAD = 7L
 private const val DAY_MS = 24 * 60 * 60_000L
 const val DEFAULT_USER_AGENT = "ShieldMedia/0.1 (Android TV)"
+private val TWENTY_FOUR_SEVEN = Regex("""\b24\s*[/x-]\s*7\b""", RegexOption.IGNORE_CASE)
 private val XTREAM_LIVE_URL = Regex("""^(.*)/live/([^/]+)/([^/]+)/(\d+)\.\w+$""")
 
 internal class IptvHttp(client: OkHttpClient) {
@@ -221,7 +222,12 @@ class IptvRepository(context: Context, okHttp: OkHttpClient) {
 
     // ---- queries for the UI (call off the main thread) ----
 
-    suspend fun groups(playlistId: Long): List<String> = withContext(Dispatchers.IO) { store.groups(playlistId) }
+    /** Groups A to Z, with the 24/7 loop channels ("24/7 Comedy"...) after the rest, also A to Z. */
+    suspend fun groups(playlistId: Long): List<String> = withContext(Dispatchers.IO) {
+        store.groups(playlistId).sortedWith(
+            compareBy<String> { TWENTY_FOUR_SEVEN.containsMatchIn(it) }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.trim() },
+        )
+    }
 
     /** Channels for a screen. Locked groups stay hidden until the parental PIN is entered. */
     suspend fun channels(playlistId: Long, filter: ChannelFilter): List<Channel> = withContext(Dispatchers.IO) {
