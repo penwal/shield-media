@@ -67,7 +67,7 @@ private val NARRATION = listOf(
     "Sit back, relax, and enjoy the show.",
 )
 private const val FALLBACK_MS = 11_000L
-private const val NARRATION_VOLUME = 0.5f
+private const val NARRATION_VOLUME = 0.25f
 private val Ice = Color(0xFFD8ECFF)
 
 /**
