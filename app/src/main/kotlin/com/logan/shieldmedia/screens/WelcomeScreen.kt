@@ -52,19 +52,22 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Calendar
 
 private const val MIN_MS = 2_500L // long enough to read, never a flash
-private const val MAX_MS = 7_000L // never hold the app hostage to a slow server
+private const val MAX_MS = 15_000L // then the app opens on Plex's "couldn't connect" screen
 private const val SETTLE_MS = 700L // after connecting, a beat for Home's rows to arrive behind
+private const val SLOW_MS = 6_000L // the status admits it's taking a while
 
 /**
  * Shown once when the app starts, over the app as it loads underneath: the brand, a greeting
  * for whoever's profile is signed in, and what's being loaded. Calls [onDone] once Plex has
- * connected (or failed) and Home has had a moment, but never before [MIN_MS] or after [MAX_MS].
+ * connected (or failed) and Home has had a moment, but never before [MIN_MS]. If Plex is still
+ * connecting after [MAX_MS], it gives up so the app opens on the "couldn't connect" message.
  */
 @Composable
 fun WelcomeScreen(container: AppContainer, onDone: () -> Unit) {
     val plexState by container.plexSession.state.collectAsState()
     val sync by container.iptv.syncState.collectAsState()
     var name by remember { mutableStateOf<String?>(null) }
+    var slow by remember { mutableStateOf(false) }
     val enter = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) { enter.animateTo(1f, tween(900, easing = Motion.EaseOut)) }
@@ -76,16 +79,21 @@ fun WelcomeScreen(container: AppContainer, onDone: () -> Unit) {
         }
     }
     LaunchedEffect(Unit) {
+        delay(SLOW_MS)
+        slow = true
+    }
+    LaunchedEffect(Unit) {
         val start = System.currentTimeMillis()
-        withTimeoutOrNull(MAX_MS) {
+        val connected = withTimeoutOrNull(MAX_MS) {
             container.plexSession.state.first { it !is PlexState.Loading }
-            delay(SETTLE_MS)
         }
+        if (connected == null) container.plexSession.giveUpWaiting() else delay(SETTLE_MS)
         delay((MIN_MS - (System.currentTimeMillis() - start)).coerceAtLeast(0))
         onDone()
     }
 
     val status = when {
+        plexState is PlexState.Loading && slow -> "Still trying to reach your Plex server"
         plexState is PlexState.Loading -> "Connecting to your Plex server"
         sync is SyncState.Running -> "Updating the TV guide"
         plexState is PlexState.Ready -> "Getting your library ready"

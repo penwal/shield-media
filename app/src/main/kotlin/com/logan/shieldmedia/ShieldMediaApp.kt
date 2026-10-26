@@ -14,6 +14,7 @@ import com.logan.shieldmedia.iptv.IptvVodRepository
 import com.logan.shieldmedia.plex.PlexLibrary
 import com.logan.shieldmedia.plex.PlexSession
 import com.logan.shieldmedia.settings.SettingsRepository
+import com.logan.shieldmedia.update.AppUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,6 +33,7 @@ class AppContainer(app: Application) {
     val plexLibrary = PlexLibrary(plexSession)
     val iptv = IptvRepository(app, okHttp)
     val iptvVod = IptvVodRepository(app, iptv)
+    val updater = AppUpdater(app, okHttp)
 }
 
 class ShieldMediaApp : Application(), SingletonImageLoader.Factory {

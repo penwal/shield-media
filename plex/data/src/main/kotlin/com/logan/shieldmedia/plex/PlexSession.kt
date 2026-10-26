@@ -149,6 +149,14 @@ class PlexSession(context: Context, okHttp: OkHttpClient) {
 
     // ---- Servers ----
 
+    /**
+     * Called when connecting has taken too long: shows the "can't connect" state (with its Try
+     * again button) instead of loading forever. A connection that finishes later still takes over.
+     */
+    fun giveUpWaiting() {
+        _state.compareAndSet(PlexState.Loading, PlexState.Error("Couldn't connect to your Plex server. Is it running and on the same network?"))
+    }
+
     suspend fun discoverServers(preferredId: String? = null) {
         val token = store.data.first()[Keys.AuthToken] ?: run {
             _state.value = PlexState.SignedOut

@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
@@ -91,6 +92,8 @@ import com.logan.shieldmedia.iptv.ui.LivePlayHandler
 import com.logan.shieldmedia.screens.PlayerTestScreen
 import com.logan.shieldmedia.screens.SettingsScreen
 import com.logan.shieldmedia.screens.WelcomeScreen
+import com.logan.shieldmedia.update.AppRelease
+import com.logan.shieldmedia.update.UpdatePrompt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -136,6 +139,13 @@ fun AppNavigation(container: AppContainer) {
             exit = fadeOut(tween(700)),
         ) {
             WelcomeScreen(container, onDone = { welcomed = true })
+        }
+        // A newer version on GitHub is offered once the welcome screen is gone.
+        val update by produceState<AppRelease?>(null) { value = container.updater.check() }
+        var updateDismissed by rememberSaveable { mutableStateOf(false) }
+        val release = update
+        if (welcomed && release != null && !updateDismissed) {
+            UpdatePrompt(container.updater, release, onDismiss = { updateDismissed = true })
         }
     }
 }
