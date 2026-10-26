@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
@@ -29,6 +28,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
@@ -124,11 +126,10 @@ class PlexDetailsViewModel(private val env: PlexEnv, private val ratingKey: Stri
         }
     }
 
-    /** Marks the title (a whole show, a movie or an episode) watched or unwatched, then reloads. */
-    fun setWatched(item: PlexItem, watched: Boolean) = viewModelScope.launch {
-        runCatching {
-            if (watched) env.library.markWatched(env.server, item.ratingKey) else env.library.markUnwatched(env.server, item.ratingKey)
-        }
+    /** Takes an in-progress title off Continue Watching, then reloads (it then just says Play). */
+    fun removeFromContinueWatching(item: PlexItem) = viewModelScope.launch {
+        runCatching { env.library.removeFromContinueWatching(env.server, item) }
+        focus.forget()
         load()
     }
 
@@ -222,6 +223,7 @@ private fun DetailsHero(env: PlexEnv, item: PlexItem, vm: PlexDetailsViewModel, 
                 modifier = Modifier.widthIn(max = 640.dp),
             )
         }
+        val playFocus = remember { FocusRequester() }
         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             val playable = if (item.type == "show") vm.nextEpisode else item
             val resumeAt = playable?.viewOffset?.takeIf { it > 0 }
@@ -234,7 +236,7 @@ private fun DetailsHero(env: PlexEnv, item: PlexItem, vm: PlexDetailsViewModel, 
                 text = primaryLabel,
                 icon = Icons.Filled.PlayArrow,
                 onClick = { playable?.let { env.play(it, fromStart = false, onPlay) } },
-                modifier = Modifier.focusMemory(vm.focus, "play", isDefault = true),
+                modifier = Modifier.focusRequester(playFocus).focusMemory(vm.focus, "play", isDefault = true),
             )
             if (resumeAt != null) {
                 SecondaryButton(
@@ -243,16 +245,17 @@ private fun DetailsHero(env: PlexEnv, item: PlexItem, vm: PlexDetailsViewModel, 
                     onClick = { env.play(playable, fromStart = true, onPlay) },
                     modifier = Modifier.focusMemory(vm.focus, "restart"),
                 )
+                SecondaryButton(
+                    text = "Remove from Continue Watching",
+                    icon = Icons.Filled.Close,
+                    onClick = {
+                        // Focus moves to Play first, since this button goes away.
+                        runCatching { playFocus.requestFocus() }
+                        vm.removeFromContinueWatching(playable)
+                    },
+                    modifier = Modifier.focusMemory(vm.focus, "remove"),
+                )
             }
-            // For something finished elsewhere (or to start a show over). Anything in progress
-            // counts as not yet watched, so it can be marked done.
-            val watched = item.isWatched && item.viewOffset == null
-            SecondaryButton(
-                text = if (watched) "Mark as unwatched" else "Mark as watched",
-                icon = if (watched) Icons.Filled.Close else Icons.Filled.Check,
-                onClick = { vm.setWatched(item, !watched) },
-                modifier = Modifier.focusMemory(vm.focus, "watched"),
-            )
         }
         val credits = listOfNotNull(
             item.genres.take(3).joinToString(", ") { it.tag }.ifBlank { null },

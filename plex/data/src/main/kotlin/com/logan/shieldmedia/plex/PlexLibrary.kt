@@ -111,6 +111,18 @@ class PlexLibrary(private val session: PlexSession) {
         http.send(server.url("/:/scrobble", "key" to ratingKey, "identifier" to "com.plexapp.plugins.library"), session.clientInfo, server.token)
     }
 
+    /**
+     * Drops an in-progress title from Continue Watching and forgets where it was stopped, so it
+     * just says Play again. Plex's own remove action keeps the position, so the position is
+     * cleared too, without changing whether it counts as watched: a rewatch stays watched.
+     */
+    suspend fun removeFromContinueWatching(server: ActiveServer, item: PlexItem) {
+        runCatching {
+            http.send(server.url("/actions/removeFromContinueWatching", "ratingKey" to item.ratingKey), session.clientInfo, server.token, method = "PUT")
+        }
+        if ((item.viewCount ?: 0) > 0) markWatched(server, item.ratingKey) else markUnwatched(server, item.ratingKey)
+    }
+
     suspend fun markUnwatched(server: ActiveServer, ratingKey: String) {
         http.send(server.url("/:/unscrobble", "key" to ratingKey, "identifier" to "com.plexapp.plugins.library"), session.clientInfo, server.token)
     }
