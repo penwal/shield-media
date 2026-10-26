@@ -65,7 +65,12 @@ enum class LibrarySort(val label: String, val key: String) {
 
 private enum class LibraryPanel { Sort, Genre }
 
-class PlexLibraryViewModel(private val env: PlexEnv, private val sectionKey: String) : ViewModel() {
+class PlexLibraryViewModel(
+    private val env: PlexEnv,
+    private val sectionKey: String,
+    /** Movies open newest-released first; shows alphabetically. */
+    val defaultSort: LibrarySort = LibrarySort.Title,
+) : ViewModel() {
     var items by mutableStateOf<List<PlexItem>?>(null)
         private set
     var total by mutableStateOf<Int?>(null)
@@ -75,7 +80,7 @@ class PlexLibraryViewModel(private val env: PlexEnv, private val sectionKey: Str
     var genres by mutableStateOf<List<LibrarySection>>(emptyList())
         private set
 
-    var sort by mutableStateOf(LibrarySort.Title)
+    var sort by mutableStateOf(defaultSort)
         private set
     var genre by mutableStateOf<LibrarySection?>(null)
         private set
@@ -136,8 +141,10 @@ class PlexLibraryViewModel(private val env: PlexEnv, private val sectionKey: Str
 }
 
 @Composable
-fun PlexLibraryScreen(env: PlexEnv, sectionKey: String, title: String, onOpen: (PlexItem) -> Unit) {
-    val vm = viewModel(key = "library-$sectionKey-${env.key}") { PlexLibraryViewModel(env, sectionKey) }
+fun PlexLibraryScreen(env: PlexEnv, sectionKey: String, title: String, onOpen: (PlexItem) -> Unit, movies: Boolean = false) {
+    val vm = viewModel(key = "library-$sectionKey-${env.key}") {
+        PlexLibraryViewModel(env, sectionKey, defaultSort = if (movies) LibrarySort.Released else LibrarySort.Title)
+    }
     var panel by remember { mutableStateOf<LibraryPanel?>(null) }
     val sortFocus = remember { FocusRequester() }
     val genreFocus = remember { FocusRequester() }
@@ -167,7 +174,7 @@ fun PlexLibraryScreen(env: PlexEnv, sectionKey: String, title: String, onOpen: (
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 ShieldChip(
-                    selected = vm.sort != LibrarySort.Title,
+                    selected = vm.sort != vm.defaultSort,
                     onClick = {
                         returnTo = sortFocus
                         panel = LibraryPanel.Sort

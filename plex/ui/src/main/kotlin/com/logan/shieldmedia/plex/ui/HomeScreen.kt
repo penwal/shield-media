@@ -59,10 +59,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class PlexHomeViewModel(private val env: PlexEnv) : ViewModel() {
-    private val _hubs = MutableStateFlow<Loadable<List<PlexHub>>>(Loadable.Loading)
+    // Home starts fresh each time it's opened from the menu; the last rows show at once while
+    // they're re-fetched, instead of loading placeholders every time.
+    private val _hubs = MutableStateFlow<Loadable<List<PlexHub>>>(lastHubs[env.key]?.let { Loadable.Ready(it) } ?: Loadable.Loading)
     val hubs: StateFlow<Loadable<List<PlexHub>>> = _hubs
     val focus = FocusMemory()
-    var focusedItem by mutableStateOf<PlexItem?>(null)
+    var focusedItem by mutableStateOf(lastHubs[env.key]?.firstOrNull()?.items?.firstOrNull())
 
     init {
         refresh()
@@ -94,6 +96,7 @@ class PlexHomeViewModel(private val env: PlexEnv) : ViewModel() {
             )
         }
         result.onSuccess { hubs ->
+            lastHubs[env.key] = hubs
             _hubs.value = Loadable.Ready(hubs)
             // Show something in the hero and backdrop before the user has moved at all.
             if (focusedItem == null) focusedItem = hubs.firstOrNull()?.items?.firstOrNull()
@@ -101,6 +104,8 @@ class PlexHomeViewModel(private val env: PlexEnv) : ViewModel() {
             .onFailure { if (_hubs.value !is Loadable.Ready) _hubs.value = Loadable.Failed(it.message ?: "Unknown error") }
     }
 }
+
+private val lastHubs = java.util.concurrent.ConcurrentHashMap<String, List<PlexHub>>()
 
 internal fun PlexHub.isContinueWatching() =
     hubIdentifier.contains("continue", ignoreCase = true) || hubIdentifier.contains("ondeck", ignoreCase = true)

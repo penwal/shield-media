@@ -107,7 +107,7 @@ private const val PLEX_PLAY_ROUTE = "plex_play/{ratingKey}?fromStart={fromStart}
 private const val FEATURE_ROUTE = "feature/{ratingKey}?fromStart={fromStart}"
 private const val PLAYER_TEST_ROUTE = "player_test"
 private const val PLEX_ITEM_ROUTE = "plex/item/{ratingKey}"
-private const val LIBRARY_ROUTE = "library/{key}?title={title}"
+private const val LIBRARY_ROUTE = "library/{key}?title={title}&type={type}"
 private const val IPTV_SOURCES_ROUTE = "iptv/sources"
 private const val IPTV_ADD_ROUTE = "iptv/add"
 private const val VOD_DETAILS_ROUTE = "iptv/vod/details"
@@ -416,7 +416,7 @@ private fun MainScaffold(
                             target = if (s.type == "movie" && isPremiumLibrary(s.title)) {
                                 "vault/${s.key}?title=${Uri.encode(s.title)}"
                             } else {
-                                "library/${s.key}?title=${Uri.encode(s.title)}"
+                                "library/${s.key}?title=${Uri.encode(s.title)}&type=${s.type}"
                             },
                         )
                     }
@@ -466,15 +466,13 @@ private fun MainScaffold(
                         // Let the new screen take focus as soon as its content is ready.
                         drawerEnteredByUser = false
                         if (dest.target.startsWith("vault/")) {
+                            // The Blu-Ray room opens over the app; leaving it lands on Home.
+                            lastSection = Destination.Home.route
+                            if (currentRoute != Destination.Home.route) navController.showSection(Destination.Home.route)
                             onOpenVault(dest.target)
                             return@SideMenu
                         }
-                        if (currentRoute != dest.id) {
-                            navController.navigate(dest.target) {
-                                popUpTo(Destination.Home.route)
-                                launchSingleTop = true
-                            }
-                        }
+                        if (currentRoute != dest.id) navController.showSection(dest.target)
                         // Hand focus to the screen (closing the menu). The outgoing screen is still
                         // fading out and can briefly hold focus, so keep at it until focus has stayed
                         // in the content for a moment — unless the viewer starts pressing keys.
@@ -519,15 +517,17 @@ private fun MainScaffold(
                         arguments = listOf(
                             navArgument("key") { type = NavType.StringType },
                             navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                            navArgument("type") { type = NavType.StringType; defaultValue = "" },
                         ),
                     ) { entry ->
                         val key = entry.arguments?.getString("key").orEmpty()
                         val title = entry.arguments?.getString("title").orEmpty()
+                        val movies = entry.arguments?.getString("type") == "movie"
                         plex { env ->
                             if (isPremiumLibrary(title)) {
                                 PlexShowcaseScreen(env, sectionKey = key, title = title, onOpen = openItem)
                             } else {
-                                PlexLibraryScreen(env, sectionKey = key, title = title, onOpen = openItem)
+                                PlexLibraryScreen(env, sectionKey = key, title = title, onOpen = openItem, movies = movies)
                             }
                         }
                     }
@@ -592,10 +592,7 @@ private fun MainScaffold(
             BackHandler(enabled = drawerHasFocus && currentRoute != Destination.Home.route) {
                 navigatedFromDrawer = true
                 lastSection = Destination.Home.route
-                navController.navigate(Destination.Home.route) {
-                    popUpTo(Destination.Home.route)
-                    launchSingleTop = true
-                }
+                navController.showSection(Destination.Home.route)
                 // Move the drawer's focus to Home once the requester has followed the selection.
                 scope.launch {
                     withFrameNanos { }
@@ -603,5 +600,16 @@ private fun MainScaffold(
                 }
             }
         }
+    }
+}
+
+/**
+ * Opens a menu section on its own: everything before it is cleared, so every section starts fresh
+ * (at the top, default sort) each time it's chosen, instead of where it was last left.
+ */
+private fun androidx.navigation.NavController.showSection(target: String) {
+    navigate(target) {
+        popUpTo(graph.id) { inclusive = true }
+        launchSingleTop = true
     }
 }
