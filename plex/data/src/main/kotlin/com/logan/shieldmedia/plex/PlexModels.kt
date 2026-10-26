@@ -136,6 +136,10 @@ data class PlexItem(
     val rating: Double? = null,
     val studio: String? = null,
     val originallyAvailableAt: String? = null,
+    /** Which library it's from (hubs that mix libraries, like Continue Watching, include it). */
+    val librarySectionTitle: String? = null,
+    /** A number in Plex's JSON; kept loose so a string form can't break parsing. */
+    val librarySectionID: kotlinx.serialization.json.JsonPrimitive? = null,
     @SerialName("Genre") val genres: List<PlexTag> = emptyList(),
     @SerialName("Director") val directors: List<PlexTag> = emptyList(),
     @SerialName("Role") val roles: List<PlexRole> = emptyList(),

@@ -86,8 +86,14 @@ class PlexHomeViewModel(private val env: PlexEnv) : ViewModel() {
             val shows = hubsOf("show")
             fun pick(hubs: List<PlexHub>, context: String, title: String? = null) =
                 hubs.firstOrNull { it.context == context && it.items.isNotEmpty() }?.let { h -> title?.let { h.copy(title = it) } ?: h }
+            // Blu-Ray titles stay out of Continue Watching: they're resumed from the Blu-Ray room.
+            val premiumKeys = sections.filter { it.type == "movie" && isPremiumLibrary(it.title) }.map { it.key }.toSet()
+            fun PlexItem.isPremium() = librarySectionTitle?.let(::isPremiumLibrary) == true ||
+                librarySectionID?.content in premiumKeys
             listOfNotNull(
-                env.library.continueWatching(env.server)?.takeIf { it.items.isNotEmpty() },
+                env.library.continueWatching(env.server)
+                    ?.let { h -> h.copy(items = h.items.filterNot { it.isPremium() }) }
+                    ?.takeIf { it.items.isNotEmpty() },
                 pick(movies, "hub.movie.recentlyreleased", "Recently Released Movies"),
                 pick(movies, "hub.movie.recentlyadded", "Recently Added Movies"),
                 pick(shows, "hub.tv.recentlyaired", "Recently Released Episodes"),

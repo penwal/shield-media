@@ -13,8 +13,8 @@ android {
         applicationId = "com.logan.shieldmedia"
         minSdk = 28
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
     }
     // The release key lives outside the repo (~/.android/shieldmedia-release.properties). Builds
     // on machines without it fall back to the debug key, so anyone can still build the app.

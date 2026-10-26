@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.runtime.Composable
@@ -120,6 +122,14 @@ class PlexDetailsViewModel(private val env: PlexEnv, private val ratingKey: Stri
         } else {
             runCatching { env.library.children(env.server, initial.ratingKey) }.getOrNull() ?: episodes.orEmpty()
         }
+    }
+
+    /** Marks the title (a whole show, a movie or an episode) watched or unwatched, then reloads. */
+    fun setWatched(item: PlexItem, watched: Boolean) = viewModelScope.launch {
+        runCatching {
+            if (watched) env.library.markWatched(env.server, item.ratingKey) else env.library.markUnwatched(env.server, item.ratingKey)
+        }
+        load()
     }
 
     /** Focusing a season shows its episodes; debounced so scrolling across seasons stays smooth. */
@@ -234,6 +244,15 @@ private fun DetailsHero(env: PlexEnv, item: PlexItem, vm: PlexDetailsViewModel, 
                     modifier = Modifier.focusMemory(vm.focus, "restart"),
                 )
             }
+            // For something finished elsewhere (or to start a show over). Anything in progress
+            // counts as not yet watched, so it can be marked done.
+            val watched = item.isWatched && item.viewOffset == null
+            SecondaryButton(
+                text = if (watched) "Mark as unwatched" else "Mark as watched",
+                icon = if (watched) Icons.Filled.Close else Icons.Filled.Check,
+                onClick = { vm.setWatched(item, !watched) },
+                modifier = Modifier.focusMemory(vm.focus, "watched"),
+            )
         }
         val credits = listOfNotNull(
             item.genres.take(3).joinToString(", ") { it.tag }.ifBlank { null },
