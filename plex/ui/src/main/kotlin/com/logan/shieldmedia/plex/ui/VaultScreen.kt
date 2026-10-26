@@ -1,7 +1,6 @@
 package com.logan.shieldmedia.plex.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
@@ -12,7 +11,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
@@ -63,8 +61,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.logan.shieldmedia.designsystem.PrimaryButton
-import com.logan.shieldmedia.designsystem.SecondaryButton
 import com.logan.shieldmedia.designsystem.ShieldColors
 import com.logan.shieldmedia.plex.PlexItem
 import kotlinx.coroutines.delay
@@ -91,7 +87,7 @@ private val STATUS = listOf(
 
 /**
  * The Blu-Ray collection as its own full-screen experience: a cinematic boot sequence (while the
- * library really loads), then the showcase. Back asks before leaving.
+ * library really loads), then the showcase. Back fades out to the main app.
  */
 @Composable
 fun PlexVaultScreen(
@@ -105,7 +101,6 @@ fun PlexVaultScreen(
     val vm = viewModel(key = "showcase-$sectionKey-${env.key}") { PlexShowcaseViewModel(env, sectionKey) }
     // Saveable: coming back from a title's page goes straight to the collection, no replay.
     var phase by rememberSaveable { mutableStateOf(PHASE_INTRO) }
-    var confirm by remember { mutableStateOf(false) }
     var leaving by remember { mutableStateOf(false) }
     val flash = remember { Animatable(0f) }
     val blackout = remember { Animatable(0f) }
@@ -132,43 +127,21 @@ fun PlexVaultScreen(
             )
         }
 
-        AnimatedVisibility(
-            visible = confirm,
-            enter = fadeIn(tween(180)) + scaleIn(tween(220), initialScale = 0.96f),
-            exit = fadeOut(tween(140)),
-        ) {
-            LeaveDialog(
-                title = title,
-                onStay = {
-                    confirm = false
-                    scope.launch {
-                        withFrameNanos { }
-                        runCatching { vm.stageFocus.requestFocus() }
-                    }
-                },
-                onLeave = {
-                    confirm = false
-                    leaving = true
-                    // Picture and music fade out together, slowly, before returning to the app.
-                    VaultMusic.fadeOut(EXIT_FADE_MS.toLong())
-                    scope.launch {
-                        blackout.animateTo(1f, tween(EXIT_FADE_MS, easing = CubicBezierEasing(0.45f, 0f, 0.55f, 1f)))
-                        delay(250) // a beat of black and silence
-                        onExit()
-                    }
-                },
-            )
-        }
-
         if (flash.value > 0f) Box(Modifier.fillMaxSize().graphicsLayer { alpha = flash.value }.background(Ice))
         if (blackout.value > 0f) Box(Modifier.fillMaxSize().graphicsLayer { alpha = blackout.value }.background(Color.Black))
     }
 
     BackHandler(enabled = phase == PHASE_INTRO && !leaving) { onExit() }
-    BackHandler(enabled = phase == PHASE_COLLECTION && !confirm && !leaving) {
-        confirm = true
+    BackHandler(enabled = phase == PHASE_COLLECTION && !leaving) {
+        leaving = true
+        // Picture and music fade out together, slowly, before returning to the app.
+        VaultMusic.fadeOut(EXIT_FADE_MS.toLong())
+        scope.launch {
+            blackout.animateTo(1f, tween(EXIT_FADE_MS, easing = CubicBezierEasing(0.45f, 0f, 0.55f, 1f)))
+            delay(250) // a beat of black and silence
+            onExit()
+        }
     }
-    BackHandler(enabled = confirm) { confirm = false }
 }
 
 @Composable
@@ -361,40 +334,5 @@ private fun ProgressRail(p: Float) {
         // Glowing head.
         drawCircle(Brush.radialGradient(listOf(Ice, Color.Transparent), center = Offset(x, y), radius = 14.dp.toPx()), radius = 14.dp.toPx(), center = Offset(x, y))
         drawCircle(Color.White, radius = 2.5.dp.toPx(), center = Offset(x, y))
-    }
-}
-
-@Composable
-private fun LeaveDialog(title: String, onStay: () -> Unit, onLeave: () -> Unit) {
-    val stayFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        withFrameNanos { }
-        runCatching { stayFocus.requestFocus() }
-    }
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.72f)), contentAlignment = Alignment.Center) {
-        Column(
-            Modifier
-                .width(560.dp)
-                .background(Color(0xFF0E131B), RoundedCornerShape(20.dp))
-                .padding(36.dp)
-                .focusGroup(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                "LEAVING ${title.uppercase()}",
-                style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 0.3.em),
-                color = Ice,
-            )
-            Text("Are you sure you want to exit?", style = MaterialTheme.typography.headlineSmall, color = Color.White)
-            Text(
-                "You'll go back to the main app.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = ShieldColors.OnSurfaceMuted,
-            )
-            Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                SecondaryButton("Stay", onClick = onStay, modifier = Modifier.focusRequester(stayFocus))
-                PrimaryButton("Exit", onClick = onLeave)
-            }
-        }
     }
 }
