@@ -68,17 +68,30 @@ class PlexHomeViewModel(private val env: PlexEnv) : ViewModel() {
         refresh()
     }
 
-    /** Re-fetched whenever Home is shown again, so Continue Watching reflects what was just played. */
+    /**
+     * Re-fetched whenever Home is shown again, so Continue Watching reflects what was just played.
+     * The lineup is chosen here rather than following Plex's Home settings: Continue Watching,
+     * then movies (released, added), shows (released, added), and Plex's seasonal row if one is on.
+     * Premium (Blu-Ray) libraries keep to their own screen.
+     */
     fun refresh() = viewModelScope.launch {
         val result = runCatching {
-            val hubs = env.library.homeHubs(env.server)
-            val continueWatching = env.library.continueWatching(env.server)
-            val hasContinue = hubs.any { it.isContinueWatching() }
-            if (continueWatching != null && !hasContinue && continueWatching.items.isNotEmpty()) {
-                listOf(continueWatching) + hubs
-            } else {
-                hubs.sortedByDescending { it.isContinueWatching() }
-            }
+            val sections = env.library.sections(env.server)
+            suspend fun hubsOf(type: String) = sections
+                .filter { it.type == type && !(type == "movie" && isPremiumLibrary(it.title)) }
+                .flatMap { s -> runCatching { env.library.sectionHubs(env.server, s.key) }.getOrDefault(emptyList()) }
+            val movies = hubsOf("movie")
+            val shows = hubsOf("show")
+            fun pick(hubs: List<PlexHub>, context: String, title: String? = null) =
+                hubs.firstOrNull { it.context == context && it.items.isNotEmpty() }?.let { h -> title?.let { h.copy(title = it) } ?: h }
+            listOfNotNull(
+                env.library.continueWatching(env.server)?.takeIf { it.items.isNotEmpty() },
+                pick(movies, "hub.movie.recentlyreleased", "Recently Released Movies"),
+                pick(movies, "hub.movie.recentlyadded", "Recently Added Movies"),
+                pick(shows, "hub.tv.recentlyaired", "Recently Released Episodes"),
+                pick(shows, "hub.tv.recentlyadded", "Recently Added TV"),
+                pick(movies, "hub.movie.curated"), // seasonal (e.g. "Oh, The Horror!" in October)
+            )
         }
         result.onSuccess { hubs ->
             _hubs.value = Loadable.Ready(hubs)

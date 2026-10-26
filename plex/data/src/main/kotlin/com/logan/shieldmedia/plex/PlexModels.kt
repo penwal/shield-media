@@ -92,6 +92,8 @@ data class LibrarySection(
 @Serializable
 data class PlexHub(
     val hubIdentifier: String = "",
+    /** What kind of row this is, e.g. "hub.movie.recentlyadded" (stable, unlike the title). */
+    val context: String = "",
     val title: String = "",
     val type: String = "",
     val size: Int = 0,

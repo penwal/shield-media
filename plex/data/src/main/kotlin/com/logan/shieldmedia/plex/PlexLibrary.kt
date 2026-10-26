@@ -23,6 +23,10 @@ class PlexLibrary(private val session: PlexSession) {
     suspend fun continueWatching(server: ActiveServer): PlexHub? =
         runCatching { server.container("/hubs/continueWatching", "count" to 20).hubs.firstOrNull() }.getOrNull()
 
+    /** Every row Plex can offer for one library (recently added, recently released, seasonal...). */
+    suspend fun sectionHubs(server: ActiveServer, sectionKey: String): List<PlexHub> =
+        server.container("/hubs/sections/$sectionKey", "count" to 20).hubs
+
     suspend fun sections(server: ActiveServer): List<LibrarySection> =
         server.container("/library/sections").directories
 
