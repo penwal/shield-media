@@ -184,21 +184,21 @@ fun SettingsScreen(
                 }
 
                 item { SectionLabel("Display") }
-            item {
-                // Cycles Standard -> Compact -> Large.
-                ShieldListItem(
-                    selected = false,
-                    onClick = {
-                        val order = listOf(UiSize.Standard, UiSize.Compact, UiSize.Large)
-                        val next = order[(order.indexOf(settings.uiSize) + 1) % order.size]
-                        scope.launch { repository.setUiSize(next) }
-                    },
-                    headlineContent = { Text("Interface size: ${settings.uiSize.label}") },
-                    supportingContent = { Text("Makes text, posters and menus smaller or larger") },
-                )
-            }
+                item {
+                    // Cycles Standard -> Compact -> Large.
+                    ShieldListItem(
+                        selected = false,
+                        onClick = {
+                            val order = listOf(UiSize.Standard, UiSize.Compact, UiSize.Large)
+                            val next = order[(order.indexOf(settings.uiSize) + 1) % order.size]
+                            scope.launch { repository.setUiSize(next) }
+                        },
+                        headlineContent = { Text("Interface size: ${settings.uiSize.label}") },
+                        supportingContent = { Text("Makes text, posters and menus smaller or larger") },
+                    )
+                }
 
-            item { SectionLabel("Playback") }
+                item { SectionLabel("Playback") }
                 item {
                     ShieldListItem(
                         selected = false,

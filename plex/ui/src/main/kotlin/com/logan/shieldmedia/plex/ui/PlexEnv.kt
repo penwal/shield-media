@@ -17,6 +17,12 @@ sealed interface Loadable<out T> {
 /** Everything a Plex screen needs: the library API and the server it's talking to. */
 class PlexEnv(val library: PlexLibrary, val server: ActiveServer) {
 
+    /**
+     * Identifies this connection for screen state: a profile switch (new token) or a new address
+     * gives screens a fresh ViewModel instead of one still talking as the old profile.
+     */
+    val key: String = "${server.id}-${(server.token + server.baseUrl).hashCode()}"
+
     fun poster(item: PlexItem): String? = library.imageUrl(server, item.posterPath(), 300, 450)
     /** Big single posters (the Blu-Ray deck): sharp at 4K output. */
     fun posterLarge(item: PlexItem): String? = library.imageUrl(server, item.posterPath(), 800, 1200)

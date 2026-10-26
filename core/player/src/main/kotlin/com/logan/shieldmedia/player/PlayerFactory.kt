@@ -27,6 +27,7 @@ data class PlaybackConfig(
 )
 
 object PlayerFactory {
+    private const val VOD_BUFFER_BYTES = 200 * 1024 * 1024
 
     /** [live]: small start buffer so channel changes are fast (TiviMate-style zapping). */
     fun create(
@@ -45,7 +46,8 @@ object PlayerFactory {
             .setUserAgent(config.userAgent)
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(20_000)
+            // A live stream that goes quiet for 8 s is dead: reconnect rather than sit frozen.
+            .setReadTimeoutMs(if (live) 8_000 else 20_000)
 
         val trackSelector = DefaultTrackSelector(context).apply {
             parameters = buildUponParameters()
@@ -63,6 +65,15 @@ object PlayerFactory {
                     setLoadControl(
                         DefaultLoadControl.Builder()
                             .setBufferDurationsMs(maxOf(15_000, start * 4), 50_000, start, start * 2)
+                            .build(),
+                    )
+                } else {
+                    // Files: read well ahead so Wi-Fi dips don't stall playback. The default caps the
+                    // buffer at ~128 MB, under 20 s of a 4K remux; this holds ~30 s of one (needs largeHeap).
+                    setLoadControl(
+                        DefaultLoadControl.Builder()
+                            .setBufferDurationsMs(30_000, 120_000, 2_500, 5_000)
+                            .setTargetBufferBytes(VOD_BUFFER_BYTES)
                             .build(),
                     )
                 }

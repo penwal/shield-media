@@ -89,7 +89,7 @@ class PlexSearchViewModel(private val env: PlexEnv) : ViewModel() {
 
 @Composable
 fun PlexSearchScreen(env: PlexEnv, onOpen: (PlexItem) -> Unit) {
-    val vm = viewModel(key = "search-${env.server.id}") { PlexSearchViewModel(env) }
+    val vm = viewModel(key = "search-${env.key}") { PlexSearchViewModel(env) }
 
     Column(Modifier.fillMaxSize()) {
         SearchField(vm.query, vm::onQueryChange)

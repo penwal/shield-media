@@ -43,8 +43,7 @@ class ShieldMediaApp : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         container = AppContainer(this)
         appScope.launch { container.plexSession.start() }
-        // Channels refresh every 12 h and the guide every 8 h; this is a no-op when both are fresh.
-        appScope.launch { container.iptv.syncAllIfStale() }
+        // IPTV channels and guide refresh from MainActivity.onStart.
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =

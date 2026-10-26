@@ -117,6 +117,7 @@ fun PlayerRoute(
     startMs: Long,
     settingsRepository: SettingsRepository,
     onExit: () -> Unit,
+    userAgent: String? = null,
 ) {
     val config by produceState<PlaybackConfig?>(initialValue = null) {
         val s = settingsRepository.playerSettings.first()
@@ -124,7 +125,7 @@ fun PlayerRoute(
             autoFrameRate = s.autoFrameRate,
             audioPassthrough = s.audioPassthrough,
             showStats = s.showStatsOverlay,
-        )
+        ).let { c -> userAgent?.let { c.copy(userAgent = it) } ?: c }
     }
     val loaded = config
     if (loaded == null) {

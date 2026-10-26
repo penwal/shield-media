@@ -104,6 +104,8 @@ class GuideViewModel(private val repo: IptvRepository) : ViewModel() {
         val (from, to, pid) = Triple(cacheFrom, cacheTo, playlistId)
         loadJob = viewModelScope.launch {
             val loaded = repo.programs(pid, ids, from, to)
+            // Dropped if the guide moved to another time range or playlist while this was loading.
+            if (from != cacheFrom || pid != playlistId) return@launch
             ids.forEach { programs[it] = loaded[it].orEmpty() }
         }
     }

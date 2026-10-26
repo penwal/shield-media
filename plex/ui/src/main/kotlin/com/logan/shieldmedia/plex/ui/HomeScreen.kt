@@ -96,7 +96,7 @@ private fun PlexHub.useLandscape() = isContinueWatching() || type == "episode" |
 
 @Composable
 fun PlexHomeScreen(env: PlexEnv, onOpen: (PlexItem) -> Unit, onPlay: PlexPlayHandler) {
-    val vm = viewModel(key = "home-${env.server.id}") { PlexHomeViewModel(env) }
+    val vm = viewModel(key = "home-${env.key}") { PlexHomeViewModel(env) }
     val hubs by vm.hubs.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { vm.refresh() }

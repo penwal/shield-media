@@ -96,7 +96,8 @@ class PlexDetailsViewModel(private val env: PlexEnv, private val ratingKey: Stri
             }
         }.onSuccess { (item, seasonKey) ->
             _item.value = Loadable.Ready(item)
-            if (item.type == "show") loadSeasons(item, seasonKey)
+            // Reloading (back from the player) stays on the season being browsed.
+            if (item.type == "show") loadSeasons(item, seasonKey ?: selectedSeason?.ratingKey)
         }.onFailure { _item.value = Loadable.Failed(it.message ?: "Unknown error") }
     }
 
@@ -111,17 +112,19 @@ class PlexDetailsViewModel(private val env: PlexEnv, private val ratingKey: Stri
             ?: unfinishedEpisodes.firstOrNull()
 
         val initial = list.firstOrNull { it.ratingKey == preferredSeasonKey } ?: firstUnfinished
-        if (initial == firstUnfinished) {
-            selectedSeason = initial
-            episodes = unfinishedEpisodes
+        seasonJob?.cancel()
+        selectedSeason = initial
+        // Swap the episodes in place (no loading row), so focus on an episode survives a refresh.
+        episodes = if (initial.ratingKey == firstUnfinished.ratingKey) {
+            unfinishedEpisodes
         } else {
-            showSeason(initial, immediate = true)
+            runCatching { env.library.children(env.server, initial.ratingKey) }.getOrNull() ?: episodes.orEmpty()
         }
     }
 
     /** Focusing a season shows its episodes; debounced so scrolling across seasons stays smooth. */
     fun showSeason(season: PlexItem, immediate: Boolean = false) {
-        if (season == selectedSeason) return
+        if (season.ratingKey == selectedSeason?.ratingKey) return
         selectedSeason = season
         seasonJob?.cancel()
         seasonJob = viewModelScope.launch {
@@ -139,7 +142,7 @@ fun PlexDetailsScreen(
     onOpen: (PlexItem) -> Unit,
     onPlay: PlexPlayHandler,
 ) {
-    val vm = viewModel(key = "details-$ratingKey") { PlexDetailsViewModel(env, ratingKey) }
+    val vm = viewModel(key = "details-$ratingKey-${env.key}") { PlexDetailsViewModel(env, ratingKey) }
     val state by vm.item.collectAsStateWithLifecycle()
     // Coming back from the player: pick up the new resume point / watched state.
     androidx.compose.runtime.LaunchedEffect(Unit) { if (vm.item.value is Loadable.Ready) vm.load() }
@@ -246,7 +249,7 @@ private fun DetailsHero(env: PlexEnv, item: PlexItem, vm: PlexDetailsViewModel, 
 private fun SeasonsRow(env: PlexEnv, vm: PlexDetailsViewModel) {
     ContentRow("Seasons", Modifier.padding(top = 28.dp)) {
         items(vm.seasons, key = { it.ratingKey }) { season ->
-            val selected = season == vm.selectedSeason
+            val selected = season.ratingKey == vm.selectedSeason?.ratingKey
             PosterCard(
                 title = season.title,
                 subtitle = if (selected) "Showing" else season.leafCount?.let { "$it episodes" },

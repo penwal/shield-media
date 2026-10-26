@@ -149,7 +149,7 @@ class PlexShowcaseViewModel(private val env: PlexEnv, private val sectionKey: St
  */
 @Composable
 fun PlexShowcaseScreen(env: PlexEnv, sectionKey: String, title: String, onOpen: (PlexItem) -> Unit) {
-    val vm = viewModel(key = "showcase-$sectionKey-${env.server.id}") { PlexShowcaseViewModel(env, sectionKey) }
+    val vm = viewModel(key = "showcase-$sectionKey-${env.key}") { PlexShowcaseViewModel(env, sectionKey) }
     val context = androidx.compose.ui.platform.LocalContext.current
     vm.prefetchImage = { url -> coil3.SingletonImageLoader.get(context).enqueue(coil3.request.ImageRequest.Builder(context).data(url).build()) }
     val items = vm.items
@@ -212,7 +212,8 @@ private fun Stage(vm: PlexShowcaseViewModel, items: List<PlexItem>, onOpen: (Ple
 /** Fine scanlines and a vignette: gives the artwork a "screen in a dark room" feel. */
 @Composable
 private fun TechOverlay() {
-    Canvas(Modifier.fillMaxSize()) {
+    // Own layer: drawn once, not re-run every frame something else on screen animates.
+    Canvas(Modifier.fillMaxSize().graphicsLayer()) {
         val step = 3.dp.toPx()
         var y = 0f
         while (y < size.height) {
@@ -249,8 +250,9 @@ private fun Header(title: String, index: Int, count: Int) {
                 style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 0.32.em),
                 color = ShieldColors.Accent,
             )
-            // A thin rail with a slow light sweeping along it.
-            Canvas(Modifier.width(360.dp).height(2.dp)) {
+            // A thin rail with a slow light sweeping along it. Its own layer, so each frame of the
+            // sweep redraws just the rail rather than the whole screen.
+            Canvas(Modifier.width(360.dp).height(2.dp).graphicsLayer()) {
                 drawRect(Color.White.copy(alpha = 0.12f))
                 val x = size.width * sweep
                 drawRect(

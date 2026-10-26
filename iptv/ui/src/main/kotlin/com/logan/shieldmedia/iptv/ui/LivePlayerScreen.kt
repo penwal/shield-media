@@ -45,6 +45,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -95,12 +96,14 @@ import com.logan.shieldmedia.player.PlayerFactory
 import com.logan.shieldmedia.player.audioOptions
 import com.logan.shieldmedia.player.selectTrack
 import com.logan.shieldmedia.player.subtitleOptions
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Date
 
 private const val BANNER_MS = 4_000L
 private const val NUMBER_ENTRY_MS = 1_400L
-private const val MAX_RETRIES = 3
+private const val MAX_RETRIES = 6
 
 private enum class LiveOverlay { None, Channels, Options }
 
@@ -143,14 +146,40 @@ fun LivePlayerScreen(
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val rootFocus = remember { FocusRequester() }
     val upStep = remember { if (repo.upIsNextChannel) 1 else -1 }
+    val scope = rememberCoroutineScope()
+    var reconnectJob by remember { mutableStateOf<Job?>(null) }
 
     fun showBanner() {
         bannerUntil = System.currentTimeMillis() + BANNER_MS
         bannerVisible = true
     }
 
+    /** Reopens the current channel's stream with a fresh connection, after [afterMs]. */
+    fun reconnect(afterMs: Long) {
+        val channel = channels.getOrNull(index) ?: return
+        reconnectJob?.cancel()
+        buffering = true
+        reconnectJob = scope.launch {
+            delay(afterMs)
+            player.setMediaItem(MediaItem.fromUri(channel.streamUrl))
+            player.prepare()
+            player.playWhenReady = true
+        }
+    }
+
+    /** Live streams hiccup: reconnect quietly, backing off a little each time, before giving up. */
+    fun retryOrFail() {
+        if (retries < MAX_RETRIES) {
+            retries++
+            reconnect(minOf(1_000L * retries, 4_000L))
+        } else {
+            failed = "This channel isn't available right now."
+        }
+    }
+
     fun tune(newIndex: Int) {
         if (channels.isEmpty()) return
+        reconnectJob?.cancel()
         val wrapped = (newIndex + channels.size) % channels.size
         if (wrapped != index) lastIndex = index
         index = wrapped
@@ -179,6 +208,9 @@ fun LivePlayerScreen(
             override fun onPlaybackStateChanged(state: Int) {
                 buffering = state == Player.STATE_BUFFERING || state == Player.STATE_IDLE
                 if (state == Player.STATE_READY) retries = 0
+                // A live stream never really ends; the server closed the connection. Without this the
+                // picture would sit frozen on the last frame.
+                if (state == Player.STATE_ENDED) retryOrFail()
             }
 
             override fun onVideoSizeChanged(size: VideoSize) {
@@ -190,15 +222,11 @@ fun LivePlayerScreen(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                // Live streams hiccup; reconnect quietly a few times before giving up.
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     player.seekToDefaultPosition()
                     player.prepare()
-                } else if (retries < MAX_RETRIES) {
-                    retries++
-                    player.prepare()
                 } else {
-                    failed = "This channel isn't available right now."
+                    retryOrFail()
                 }
             }
         }

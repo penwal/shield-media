@@ -115,6 +115,15 @@ private const val UP_NEXT_SECONDS = 10
 private const val SEEK_BACK_MS = 10_000L
 private const val SEEK_FORWARD_MS = 30_000L
 private const val SEEK_COMMIT_MS = 650L
+private const val MAX_NETWORK_RETRIES = 6
+
+/** Connection dropped or stalled: worth reconnecting (as opposed to a missing file or a decoder problem). */
+private val TRANSIENT_NETWORK_ERRORS = setOf(
+    PlaybackException.ERROR_CODE_TIMEOUT,
+    PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+)
 
 @Composable
 fun PlayerScreen(
@@ -171,6 +180,8 @@ fun PlayerScreen(
     var upNextRequested by remember { mutableStateOf(false) }
     var upNextDismissed by remember { mutableStateOf(false) }
     var upNextCountdown by remember { mutableIntStateOf(UP_NEXT_SECONDS) }
+    var networkRetries by remember { mutableIntStateOf(0) }
+    var reconnecting by remember { mutableStateOf(false) }
 
     val rootFocus = remember { FocusRequester() }
     val playFocus = remember { FocusRequester() }
@@ -229,6 +240,7 @@ fun PlayerScreen(
 
             override fun onPlaybackStateChanged(state: Int) {
                 playbackState = state
+                if (state == Player.STATE_READY) networkRetries = 0
                 if (state == Player.STATE_ENDED && session != null) {
                     // Finished: roll into the next episode, or go back to where playback started.
                     if (upNext != null && !upNextDismissed) session.playUpNext() else onExit()
@@ -242,6 +254,17 @@ fun PlayerScreen(
             }
 
             override fun onPlayerError(e: PlaybackException) {
+                // A dropped connection (weak Wi-Fi) resumes where it left off after a short wait.
+                if (e.errorCode in TRANSIENT_NETWORK_ERRORS && networkRetries < MAX_NETWORK_RETRIES) {
+                    networkRetries++
+                    reconnecting = true
+                    scope.launch {
+                        delay(1_500L * networkRetries)
+                        reconnecting = false
+                        player.prepare()
+                    }
+                    return
+                }
                 // Decoder, container or audio-output failures mean this device can't play the
                 // original file; anything else (network, server) is shown as an error.
                 val unsupported = e.errorCode in 3000..3999 || e.errorCode in 4000..4999 || e.errorCode in 5000..5999
@@ -374,6 +397,7 @@ fun PlayerScreen(
 
     BackHandler {
         when {
+            error != null -> onExit()
             showUpNext -> upNextDismissed = true
             panel != null -> panel = null
             osdVisible -> osdVisible = false
@@ -461,7 +485,7 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        if (playbackState == Player.STATE_BUFFERING && error == null) {
+        if ((playbackState == Player.STATE_BUFFERING || reconnecting) && error == null) {
             Spinner(Modifier.align(Alignment.Center))
         }
 

@@ -102,7 +102,7 @@ fun PlexVaultScreen(
     onExit: () -> Unit,
 ) {
     // Same key as the showcase, so the intro and the collection share one (pre-loading) model.
-    val vm = viewModel(key = "showcase-$sectionKey-${env.server.id}") { PlexShowcaseViewModel(env, sectionKey) }
+    val vm = viewModel(key = "showcase-$sectionKey-${env.key}") { PlexShowcaseViewModel(env, sectionKey) }
     // Saveable: coming back from a title's page goes straight to the collection, no replay.
     var phase by rememberSaveable { mutableStateOf(PHASE_INTRO) }
     var confirm by remember { mutableStateOf(false) }

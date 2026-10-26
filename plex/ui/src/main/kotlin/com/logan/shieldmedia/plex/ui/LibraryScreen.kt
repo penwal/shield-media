@@ -137,7 +137,7 @@ class PlexLibraryViewModel(private val env: PlexEnv, private val sectionKey: Str
 
 @Composable
 fun PlexLibraryScreen(env: PlexEnv, sectionKey: String, title: String, onOpen: (PlexItem) -> Unit) {
-    val vm = viewModel(key = "library-$sectionKey-${env.server.id}") { PlexLibraryViewModel(env, sectionKey) }
+    val vm = viewModel(key = "library-$sectionKey-${env.key}") { PlexLibraryViewModel(env, sectionKey) }
     var panel by remember { mutableStateOf<LibraryPanel?>(null) }
     val sortFocus = remember { FocusRequester() }
     val genreFocus = remember { FocusRequester() }

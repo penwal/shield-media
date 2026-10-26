@@ -94,7 +94,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val MAIN_ROUTE = "main"
-private const val PLAYER_ROUTE = "player?uri={uri}&title={title}&start={start}"
+private const val PLAYER_ROUTE = "player?uri={uri}&title={title}&start={start}&ua={ua}"
 private const val PLEX_SIGN_IN_ROUTE = "plex_sign_in"
 private const val PLEX_PROFILES_ROUTE = "plex_profiles"
 private const val VAULT_ROUTE = "vault/{key}?title={title}"
@@ -140,6 +140,10 @@ private fun RootGraph(container: AppContainer, rootNav: androidx.navigation.NavH
                 container = container,
                 onPlay = { uri, title, startMs ->
                     rootNav.navigate("player?uri=${Uri.encode(uri)}&title=${Uri.encode(title)}&start=$startMs")
+                },
+                // Catch-up: the provider sees the same user agent as its live streams.
+                onPlayArchive = { uri, title, userAgent ->
+                    rootNav.navigate("player?uri=${Uri.encode(uri)}&title=${Uri.encode(title)}&ua=${Uri.encode(userAgent)}")
                 },
                 onPlexSignIn = { rootNav.navigate(PLEX_SIGN_IN_ROUTE) },
                 onPlexProfiles = { rootNav.navigate(PLEX_PROFILES_ROUTE) },
@@ -201,12 +205,14 @@ private fun RootGraph(container: AppContainer, rootNav: androidx.navigation.NavH
                 navArgument("uri") { type = NavType.StringType },
                 navArgument("title") { type = NavType.StringType; defaultValue = "" },
                 navArgument("start") { type = NavType.LongType; defaultValue = 0L },
+                navArgument("ua") { type = NavType.StringType; defaultValue = "" },
             ),
         ) { entry ->
             PlayerRoute(
                 uri = entry.arguments?.getString("uri").orEmpty(),
                 title = entry.arguments?.getString("title").orEmpty(),
                 startMs = entry.arguments?.getLong("start") ?: 0L,
+                userAgent = entry.arguments?.getString("ua")?.ifEmpty { null },
                 settingsRepository = container.settings,
                 onExit = { rootNav.popBackStack() },
             )
@@ -304,6 +310,7 @@ private fun RootGraph(container: AppContainer, rootNav: androidx.navigation.NavH
 private fun MainScaffold(
     container: AppContainer,
     onPlay: PlayHandler,
+    onPlayArchive: (uri: String, title: String, userAgent: String) -> Unit,
     onPlexSignIn: () -> Unit,
     onPlexProfiles: () -> Unit,
     onOpenVault: (String) -> Unit,
@@ -346,14 +353,17 @@ private fun MainScaffold(
     val drawerFocus = remember { FocusRequester() }
     val plexState by container.plexSession.state.collectAsState()
     // Current profile's name and avatar for the menu (Home profile if switched, else the account).
+    // Like the libraries, the last one found stays put through reconnects and failed requests.
     val profile by androidx.compose.runtime.produceState<Pair<String, String?>?>(null, plexState) {
-        value = if (plexState is com.logan.shieldmedia.plex.PlexState.Ready) {
-            val session = container.plexSession
-            val account = session.user()
-            val name = session.currentProfileName() ?: account?.let { it.title ?: it.username }
-            name?.let { n -> n to (session.homeUsers().firstOrNull { it.title == n }?.thumb ?: account?.thumb) }
-        } else {
-            null
+        when (plexState) {
+            is com.logan.shieldmedia.plex.PlexState.SignedOut -> value = null
+            is com.logan.shieldmedia.plex.PlexState.Ready -> {
+                val session = container.plexSession
+                val account = session.user()
+                val name = session.currentProfileName() ?: account?.let { it.title ?: it.username }
+                if (name != null) value = name to (session.homeUsers().firstOrNull { it.title == name }?.thumb ?: account?.thumb)
+            }
+            else -> Unit
         }
     }
     val scope = rememberCoroutineScope()
@@ -426,7 +436,7 @@ private fun MainScaffold(
                             drawerHasFocus = it.hasFocus
                         }
                         // Entering the menu always lands on the current section, not the nearest item.
-                        .focusProperties { onEnter = { drawerFocus.requestFocus() } }
+                        .focusProperties { onEnter = { runCatching { drawerFocus.requestFocus() } } }
                         .focusGroup(),
                     // Choosing a section closes the menu and drops you into it.
                     onSelect = { dest ->
@@ -503,7 +513,10 @@ private fun MainScaffold(
                             container.iptv,
                             onPlay = onPlayLive,
                             onAddSource = { navController.navigate(IPTV_ADD_ROUTE) },
-                            onPlayArchive = { uri, title -> onPlay(uri, title, 0L) },
+                            onPlayArchive = { uri, title ->
+                                val ua = container.iptv.userAgent(container.iptv.activePlaylistId.value)
+                                onPlayArchive(uri, title, ua ?: com.logan.shieldmedia.iptv.DEFAULT_USER_AGENT)
+                            },
                         )
                     }
                     composable(IPTV_SOURCES_ROUTE) {
