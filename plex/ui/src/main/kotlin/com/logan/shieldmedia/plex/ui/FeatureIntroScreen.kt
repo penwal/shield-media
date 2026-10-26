@@ -67,6 +67,7 @@ private val NARRATION = listOf(
     "Sit back, relax, and enjoy the show.",
 )
 private const val FALLBACK_MS = 11_000L
+private const val NARRATION_VOLUME = 0.5f
 private val Ice = Color(0xFFD8ECFF)
 
 /**
@@ -88,7 +89,7 @@ fun FeatureIntroScreen(env: PlexEnv, ratingKey: String, onStart: () -> Unit, onC
 
     val player = remember {
         val id = context.resources.getIdentifier("feature_intro", "raw", context.packageName)
-        if (id != 0) MediaPlayer.create(context, id) else null
+        if (id != 0) MediaPlayer.create(context, id)?.apply { setVolume(NARRATION_VOLUME, NARRATION_VOLUME) } else null
     }
     DisposableEffect(player) { onDispose { player?.release() } }
 

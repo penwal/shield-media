@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
  */
 object VaultMusic {
     private const val RESOURCE = "vault_theme"
-    private const val VOLUME = 0.25f
+    private const val VOLUME = 0.20f
     private const val FADE_STEPS = 40
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
