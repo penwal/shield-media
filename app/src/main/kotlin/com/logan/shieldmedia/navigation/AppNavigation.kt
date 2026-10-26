@@ -90,6 +90,7 @@ import com.logan.shieldmedia.iptv.ui.ReminderHost
 import com.logan.shieldmedia.iptv.ui.LivePlayHandler
 import com.logan.shieldmedia.screens.PlayerTestScreen
 import com.logan.shieldmedia.screens.SettingsScreen
+import com.logan.shieldmedia.screens.WelcomeScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -119,11 +120,23 @@ typealias PlayHandler = (uri: String, title: String, startMs: Long) -> Unit
 @Composable
 fun AppNavigation(container: AppContainer) {
     val rootNav = rememberNavController()
-    ReminderHost(
-        repo = container.iptv,
-        onWatch = { r -> rootNav.navigate("live?playlist=${r.playlistId}&filter=all&channel=${r.channelId}") },
-    ) {
-        RootGraph(container, rootNav)
+    // Welcome screen on a fresh start, over the app as it loads underneath (not on coming back).
+    var welcomed by rememberSaveable { mutableStateOf(false) }
+    // Keys wait until the welcome screen is gone, so nothing moves behind it.
+    Box(Modifier.fillMaxSize().onPreviewKeyEvent { !welcomed }) {
+        ReminderHost(
+            repo = container.iptv,
+            onWatch = { r -> rootNav.navigate("live?playlist=${r.playlistId}&filter=all&channel=${r.channelId}") },
+        ) {
+            RootGraph(container, rootNav)
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = !welcomed,
+            enter = androidx.compose.animation.EnterTransition.None,
+            exit = fadeOut(tween(700)),
+        ) {
+            WelcomeScreen(container, onDone = { welcomed = true })
+        }
     }
 }
 
