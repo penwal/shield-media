@@ -335,7 +335,19 @@ fun LivePlayerScreen(
             .focusRequester(rootFocus)
             .focusable(),
     ) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // During a covered break the picture keeps playing (muted) as a small preview; the cover
+        // leaves a window over exactly this spot (CommercialBreaks.kt).
+        Box(
+            if (covered && current != null) {
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = PreviewMargin, bottom = PreviewMargin)
+                    .size(PreviewWidth, PreviewHeight)
+            } else {
+                Modifier.fillMaxSize()
+            },
+            contentAlignment = Alignment.Center,
+        ) {
             AndroidView(
                 factory = { ctx ->
                     SurfaceView(ctx).apply {

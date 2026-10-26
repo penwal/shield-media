@@ -31,6 +31,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -407,7 +415,20 @@ private suspend fun copyFrame(view: SurfaceView, into: Bitmap, handler: Handler)
         }
     }
 
-/** What shows instead of the ads. */
+/** The small live preview during a break: bottom-right, 16:9. */
+internal val PreviewWidth = 384.dp
+internal val PreviewHeight = 216.dp
+internal val PreviewMargin = 56.dp
+private val PreviewCorner = 12.dp
+
+private fun androidx.compose.ui.unit.Density.previewRect(width: Float, height: Float): Rect {
+    val w = PreviewWidth.toPx()
+    val h = PreviewHeight.toPx()
+    val m = PreviewMargin.toPx()
+    return Rect(width - m - w, height - m - h, width - m, height - m)
+}
+
+/** What shows instead of the ads, with a window onto the muted live picture. */
 @Composable
 internal fun CommercialCover(channel: Channel, programTitle: String?, modifier: Modifier = Modifier) {
     val since = remember { System.currentTimeMillis() }
@@ -418,7 +439,30 @@ internal fun CommercialCover(channel: Channel, programTitle: String?, modifier: 
             delay(1_000)
         }
     }
-    Box(modifier.fillMaxSize().background(ShieldColors.Background), contentAlignment = Alignment.Center) {
+    Box(
+        modifier.fillMaxSize().drawBehind {
+            // Solid everywhere except a window in the corner, where the (muted) live picture
+            // keeps playing small: LivePlayerScreen shrinks the video into exactly this spot.
+            val hole = previewRect(size.width, size.height)
+            val corner = CornerRadius(PreviewCorner.toPx())
+            drawPath(
+                Path().apply {
+                    fillType = PathFillType.EvenOdd
+                    addRect(Rect(Offset.Zero, size))
+                    addRoundRect(RoundRect(hole, corner))
+                },
+                ShieldColors.Background,
+            )
+            drawRoundRect(
+                Color.White.copy(alpha = 0.22f),
+                topLeft = hole.topLeft,
+                size = hole.size,
+                cornerRadius = corner,
+                style = Stroke(1.dp.toPx()),
+            )
+        },
+        contentAlignment = Alignment.Center,
+    ) {
         Canvas(Modifier.fillMaxSize()) {
             drawRect(
                 Brush.radialGradient(
@@ -427,6 +471,16 @@ internal fun CommercialCover(channel: Channel, programTitle: String?, modifier: 
                     radius = size.width * 0.45f,
                 ),
             )
+        }
+        Row(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = PreviewMargin, bottom = PreviewMargin + PreviewHeight + 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(7.dp).background(Color(0xFFE5484D), CircleShape))
+            Text("STILL ON  ·  ${channel.name}", style = MaterialTheme.typography.labelMedium, color = ShieldColors.OnSurfaceMuted, maxLines = 1)
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(width = 180.dp, height = 90.dp), contentAlignment = Alignment.Center) {
