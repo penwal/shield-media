@@ -2,6 +2,7 @@ package com.logan.shieldmedia.plex.ui
 
 import android.view.TextureView
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -14,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -28,9 +30,12 @@ import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import com.logan.shieldmedia.plex.PlexItem
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val SETTLE_MS = 1_200L
 private const val BAR_ZOOM = 1.25f
+private const val ART_WAIT_MS = 2_500L
 
 /**
  * Plays the focused title's trailer silently behind the showcase, filling the screen (cropped,
@@ -38,7 +43,7 @@ private const val BAR_ZOOM = 1.25f
  * fades out before switching titles, so flicking through titles never shows a black flash.
  */
 @Composable
-fun TrailerBackdrop(env: PlexEnv, item: PlexItem?, modifier: Modifier = Modifier) {
+fun TrailerBackdrop(env: PlexEnv, item: PlexItem?, modifier: Modifier = Modifier, artReady: () -> Boolean = { true }) {
     val context = LocalContext.current
     val player = remember {
         ExoPlayer.Builder(context).build().apply {
@@ -76,7 +81,12 @@ fun TrailerBackdrop(env: PlexEnv, item: PlexItem?, modifier: Modifier = Modifier
     }
 
     LaunchedEffect(item?.ratingKey) {
-        alpha.animateTo(0f, tween(350))
+        if (alpha.value > 0f) {
+            // Keep the old trailer up until the new title's artwork is behind it, then fade
+            // straight to that, never back to the previous title's picture.
+            withTimeoutOrNull(ART_WAIT_MS) { snapshotFlow { artReady() }.first { it } }
+            alpha.animateTo(0f, tween(700, easing = CubicBezierEasing(0.45f, 0f, 0.55f, 1f)))
+        }
         player.stop()
         player.clearMediaItems()
         val key = item?.ratingKey ?: return@LaunchedEffect

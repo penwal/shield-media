@@ -24,7 +24,12 @@ import kotlinx.coroutines.delay
  * flashing through an empty frame.
  */
 @Composable
-fun Backdrop(imageUrl: String?, modifier: Modifier = Modifier) {
+fun Backdrop(
+    imageUrl: String?,
+    modifier: Modifier = Modifier,
+    /** Called once [imageUrl] is fully on screen (loaded and crossfaded in). */
+    onShown: ((String?) -> Unit)? = null,
+) {
     var settledUrl by remember { mutableStateOf(imageUrl) }
     LaunchedEffect(imageUrl) {
         if (settledUrl != null) delay(Motion.BACKDROP_SETTLE_MS)
@@ -35,7 +40,11 @@ fun Backdrop(imageUrl: String?, modifier: Modifier = Modifier) {
     val painter = rememberAsyncImagePainter(settledUrl)
     val state by painter.state.collectAsState()
     LaunchedEffect(state, settledUrl) {
-        if (state is AsyncImagePainter.State.Success || settledUrl == null) shownUrl = settledUrl
+        if (state is AsyncImagePainter.State.Success || settledUrl == null) {
+            shownUrl = settledUrl
+            delay(Motion.BACKDROP_MS.toLong())
+            onShown?.invoke(settledUrl)
+        }
     }
 
     Box(modifier.fillMaxSize()) {

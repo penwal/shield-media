@@ -38,6 +38,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -132,7 +133,10 @@ class PlexShowcaseViewModel(private val env: PlexEnv, private val sectionKey: St
         val list = items ?: return
         (i - 1..i + 2).mapNotNull { list.getOrNull(it) }.forEach(::loadDetails)
         // Warm the image cache for the next poster so flipping shows it sharp immediately.
-        list.getOrNull(i + 1)?.let { next -> env.posterLarge(next)?.let { prefetchImage?.invoke(it) } }
+        list.getOrNull(i + 1)?.let { next ->
+            env.posterLarge(next)?.let { prefetchImage?.invoke(it) }
+            env.backdrop(next)?.let { prefetchImage?.invoke(it) }
+        }
     }
 
     private fun loadDetails(item: PlexItem) {
@@ -157,9 +161,12 @@ fun PlexShowcaseScreen(env: PlexEnv, sectionKey: String, title: String, onOpen: 
     val detail = current?.let { vm.details[it.ratingKey] } ?: current
 
     Box(Modifier.fillMaxSize()) {
-        Backdrop(env.backdrop(current))
-        // The trailer plays silently over the artwork; the same scrims sit on top of it.
-        TrailerBackdrop(env, current)
+        val art = env.backdrop(current)
+        var artShown by remember { mutableStateOf<String?>(null) }
+        Backdrop(art, onShown = { artShown = it })
+        // The trailer plays silently over the artwork; the same scrims sit on top of it. On a
+        // change of title it holds until the new artwork is in place, then fades straight to it.
+        TrailerBackdrop(env, current, artReady = { art == null || artShown == art })
         TechOverlay()
 
         when {
